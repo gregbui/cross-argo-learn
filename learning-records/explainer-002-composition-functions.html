@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Composition Functions — Crossplane</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+    color: var(--accent-cyan);
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+    padding: 0.75rem 1rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.green {
+    border-left-color: var(--accent-green);
+    background: rgba(63, 185, 80, 0.06);
+  }
+  .callout.orange {
+    border-left-color: var(--accent-orange);
+    background: rgba(210, 153, 34, 0.06);
+  }
+  .callout.red {
+    border-left-color: var(--accent-red);
+    background: rgba(248, 81, 73, 0.06);
+  }
+  .callout-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+  .diagram-title {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+  }
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+  }
+  .flow-box {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .flow-box.xr { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); border: 1px solid rgba(188, 140, 255, 0.3); }
+  .flow-box.fn { background: rgba(88, 166, 255, 0.15); color: var(--accent); border: 1px solid rgba(88, 166, 255, 0.3); }
+  .flow-box.out { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
+  .flow-arrow { color: var(--text-muted); font-size: 1.2rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td { background: var(--bg); }
+  ul, ol {
+    margin: 0.5rem 0 1rem 1.5rem;
+  }
+  li { margin-bottom: 0.4rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .comparison-col {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+  }
+  .comparison-col h3 { margin-top: 0; }
+  .comparison-col.declarative { border-top: 3px solid var(--accent-green); }
+  .comparison-col.pipeline { border-top: 3px solid var(--accent-orange); }
+  .tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.15em 0.5em;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-right: 0.3rem;
+  }
+  .tag.green { background: rgba(63,185,80,0.15); color: var(--accent-green); }
+  .tag.orange { background: rgba(210,153,34,0.15); color: var(--accent-orange); }
+  .tag.red { background: rgba(248,81,73,0.15); color: var(--accent-red); }
+  .tag.blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+  .answer-toggle {
+    display: inline-block;
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--accent-orange);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 1rem 0;
+    transition: background 0.2s;
+  }
+  .answer-toggle:hover {
+    background: rgba(210, 153, 34, 0.25);
+  }
+  .answer-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .answer-panel h2 {
+    margin-top: 1.5rem;
+    font-size: 1.2rem;
+  }
+  .answer-panel h3 {
+    font-size: 1rem;
+    color: var(--accent-orange);
+  }
+  .answer-panel pre {
+    font-size: 0.8rem;
+  }
+  .answer-table {
+    font-size: 0.85rem;
+  }
+  .answer-table th {
+    background: rgba(210, 153, 34, 0.1);
+    color: var(--accent-orange);
+  }
+  .answer-table td {
+    background: var(--bg);
+  }
+</style>
+<script>
+  function toggleAnswer(id) {
+    var panel = document.getElementById(id);
+    var btn = panel.previousElementSibling;
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      btn.textContent = 'Hide Answers ▴';
+    } else {
+      panel.style.display = 'none';
+      btn.textContent = 'Show Answers ▾';
+    }
+  }
+</script>
+</style>
+</head>
+<body>
+
+<h1>Composition Functions</h1>
+
+<p>Crossplane Compositions can be written two ways: the old <strong>declarative</strong> style (patches + connections) and the new <strong>pipeline</strong> style (Composition Functions). This explainer covers the function-based approach — what functions are, the three built-in functions, and how to choose between them.</p>
+
+<div class="callout">
+  <div class="callout-label">Why functions exist</div>
+  Declarative patches can do field-level mapping and simple transforms, but they cannot express loops, conditionals, or complex data manipulation. Composition Functions are small programs that run during composition rendering, giving you full programming capability within the reconciliation loop.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>1. The Composition Function Model</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>A Composition Function is a container image that implements the <strong>Composition Function Runtime gRPC protocol</strong>. Crossplane calls it during reconciliation, passes it the XR and any inputs, and expects back a list of managed resources to create or update.</p>
+
+<div class="diagram">
+  <div class="diagram-title">Function Invocation During Reconciliation</div>
+  <div class="flow">
+    <span class="flow-box xr">XR (reconciling)</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box fn">Composition Controller</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box fn">Function Runtime</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box fn">Function Container</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box out">Managed Resources</span>
+  </div>
+</div>
+
+<p>The Composition declares a <code>mode: Pipeline</code> with ordered <code>steps</code>. Each step references a function and optionally passes inputs (manifests, function config, or XR data):</p>
+
+<pre><code>spec:
+  mode: Pipeline
+  pipeline:
+  - step: render-template
+    functionRef:
+      name: crossplane-function-go-templating
+    inputs:
+    - name: vm-base
+      base:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          labels:
+            managed-by: crossplane
+        spec:
+          running: true
+          template:
+            spec:
+              domain:
+                devices: {}
+  - step: apply-patches
+    functionRef:
+      name: crossplane-function-patch-and-transform
+    inputs:
+      functionConfigRef:
+        name: vm-patch-config
+  - step: finalize
+    functionRef:
+      name: crossplane-function-go-templating
+    inputs:
+    - name: vm-final
+      base:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          labels:
+            managed-by: crossplane</code></pre>
+
+<div class="callout orange">
+  <div class="callout-label">Key concept</div>
+  Each function step receives the <strong>output</strong> of the previous step. The first step gets the XR + its own inputs. The last step's output becomes the Composition's final list of managed resources. This is why steps are ordered — data flows through the pipeline.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>2. The Three Built-in Functions</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="comparison">
+  <div class="comparison-col declarative">
+    <h3><span class="tag green">Declarative</span> Patch-and-Transform</h3>
+    <p><strong>What it does:</strong> Applies YAML patches to resources in the pipeline. Think of it as "find and replace" for Kubernetes manifests.</p>
+    <p><strong>Best for:</strong> Field mapping, adding labels/annotations, simple value transforms.</p>
+    <p><strong>Limitations:</strong> No loops, no conditionals, no dynamic resource creation. One input resource → one output resource (per patch set).</p>
+    <p><strong>Config:</strong> Uses a <code>FunctionConfig</code> CRD with <code>patches</code> and <code>transforms</code> arrays.</p>
+  </div>
+  <div class="comparison-col pipeline">
+    <h3><span class="tag orange">Imperative</span> Go-Templating</h3>
+    <p><strong>What it does:</strong> Renders resources from Go templates (Go template language + Sprig functions). Supports loops, conditionals, and data manipulation.</p>
+    <p><strong>Best for:</strong> Dynamic resource counts (e.g., N disks), conditional fields, complex value computation.</p>
+    <p><strong>Limitations:</strong> Template syntax can get complex. Debugging template errors requires reading function logs.</p>
+    <p><strong>Config:</strong> Template strings inline in the Composition or stored as ConfigMaps.</p>
+  </div>
+</div>
+
+<p><strong>The third function</strong> — <code>crossplane-function-utam</code> (Useful Templating And Mapping) — is a newer addition that combines declarative patching with limited templating. It's worth knowing about but less mature than the other two.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>3. Patch-and-Transform in Detail</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>This is the most common function for VM provisioning. It uses a <code>FunctionConfig</code> to declare patches that transform input resources.</p>
+
+<h3>The FunctionConfig</h3>
+
+<pre><code>apiVersion: pkg.crossplane.io/v1beta1
+kind: FunctionConfig
+metadata:
+  name: vm-patch-config
+spec:
+  parameters:
+    compute:
+      vcpus: 4
+      memory: "8Gi"
+    storage:
+      size: "50Gi"
+      storageClass: ocs.external.ceph.rook.io</code></pre>
+
+<h3>The Patches in the FunctionConfig</h3>
+
+<pre><code>apiVersion: pkg.crossplane.io/v1beta1
+kind: FunctionConfig
+metadata:
+  name: vm-patch-config
+spec:
+  patches:
+  # Map XR spec.compute.vcpus → VM spec.template.spec.domain.cpu.cores
+  - from: XR
+    to: spec.template.spec.domain.cpu.cores
+    policy:
+      optional: false
+    transforms:
+    - type: integerToCore
+      integerToCore: {}
+
+  # Map XR spec.compute.memory → VM spec.template.spec.domain.resources.requests.memory
+  - from: XR
+    to: spec.template.spec.domain.resources.requests.memory
+    policy:
+      optional: false
+
+  # Map XR spec.storage.size → DataVolume spec.pvc.resources.requests.storage
+  - from: XR
+    to: spec.pvc.resources.requests.storage
+    transforms:
+    - type: parseDuration
+      parseDuration:
+        from: spec.storage.size
+
+  # Add labels to all managed resources
+  - type: mapFrom
+    mapFrom:
+    - path: metadata.labels
+      ref:
+        kind: XR
+    to: metadata.labels
+
+  # Set VM running state from XR
+  - from: XR
+    to: spec.running
+    transforms:
+    - type: const
+      const:
+        val: true</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Patch policy</div>
+  <code>optional: true</code> — skip the patch if the source field is missing (don't error).<br>
+  <code>optional: false</code> — fail the composition if the source field is missing (strict validation).<br>
+  <code>fromField/toField</code> — map between specific fields.<br>
+  <code>fromValue/toField</code> — set a constant value.<br>
+  <code>mapFrom/mapTo</code> — copy entire objects or arrays.
+</div>
+
+<h3>Transforms Available</h3>
+
+<table>
+  <thead>
+    <tr><th>Transform</th><th>Purpose</th><th>Example</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>const</code></td>
+      <td>Set a fixed value</td>
+      <td><code>{val: "true"}</code> — always set running: true</td>
+    </tr>
+    <tr>
+      <td><code>math</code></td>
+      <td>Arithmetic on numeric fields</td>
+      <td><code>{op: "multiply", factor: 1024}</code> — convert Gi to Mi</td>
+    </tr>
+    <tr>
+      <td><code>string</code></td>
+      <td>String manipulation</td>
+      <td><code>{op: "format", format: "vm-%s"}</code> — prefix with name</td>
+    </tr>
+    <tr>
+      <td><code>date</code></td>
+      <td>Date formatting</td>
+      <td><code>{format: "2006-01-02"}</code> — RFC 3339 date</td>
+    </tr>
+    <tr>
+      <td><code>parseDuration</code></td>
+      <td>Parse Kubernetes duration strings</td>
+      <td><code>{}</code> — converts "5m" to nanoseconds</td>
+    </tr>
+    <tr>
+      <td><code>converter</code></td>
+      <td>Convert between types</td>
+      <td><code>{kind: "toString"}</code> or <code>{kind: "toInt"}</code></td>
+    </tr>
+    <tr>
+      <td><code>password</code></td>
+      <td>Generate random passwords</td>
+      <td><code>{length: 32}</code> — generates 32-char random string</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>4. Go-Templating in Detail</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Go-Templating uses Go's template engine with Sprig function extensions. It's the choice when you need logic that patches alone can't express.</p>
+
+<h3>Use cases for Go-Templating</h3>
+
+<ul>
+  <li><strong>Dynamic resource counts:</strong> Create N number of disks based on <code>spec.storage.disks</code> array</li>
+  <li><strong>Conditional fields:</strong> Only set <code>spec.evictionStrategy</code> if the XR specifies live-migration support</li>
+  <li><strong>Computed values:</strong> Generate a unique VM name from the XR name + namespace</li>
+  <li><strong>Complex networking:</strong> Build a list of network definitions from an XR array input</li>
+</ul>
+
+<h3>Example: Conditional disk configuration</h3>
+
+<pre><code># Composition step using Go-Templating
+- step: render-disks
+  functionRef:
+    name: crossplane-function-go-templating
+  inputs:
+  - name: disk-template
+    ref:
+      kind: ConfigMap
+      apiVersion: v1
+      name: vm-disk-template
+    mode: Rendered</code></pre>
+
+<pre><code># ConfigMap: vm-disk-template
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vm-disk-template
+data:
+  template.yaml: |
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+    metadata:
+      name: {{ .XR.metadata.name }}-vm
+      labels:
+        infra.example.com/xr-name: {{ .XR.metadata.name }}
+    spec:
+      running: {{ if .XR.spec.compute.liveMigrate }}true{{ else }}false{{ end }}
+      template:
+        spec:
+          domain:
+            cpu:
+              cores: {{ .XR.spec.compute.vcpus }}
+            devices:
+              disks:
+              {{- range $i, $disk := .XR.spec.storage.disks }}
+              - name: disk-{{ $i }}
+                disk:
+                  bus: {{ $disk.bus | default "virtio" }}
+              {{- end }}
+              {{- if .XR.spec.storage.bootDevice }}
+              bootOrder: {{ .XR.spec.storage.bootDevice.order }}
+              {{- end }}
+            resources:
+              requests:
+                memory: {{ .XR.spec.compute.memory }}
+          networks:
+          {{- range .XR.spec.network.interfaces }}
+          - name: {{ .name }}
+            {{- if .pod }}
+            pod: {}
+            {{- end }}
+            {{- if .multus }}
+            multus:
+              networkName: {{ .multus.networkName }}
+            {{- end }}
+          {{- end }}
+          volumes:
+          {{- range $i, $disk := .XR.spec.storage.disks }}
+          - name: disk-{{ $i }}
+            {{- if $disk.dataVolume }}
+            dataVolume:
+              name: dv-{{ $.XR.metadata.name }}-{{ $i }}
+            {{- else if $disk.existingPvc }}
+            persistentVolumeClaim:
+              claimName: {{ $disk.existingPvc }}
+            {{- end }}
+          {{- end }}</code></pre>
+
+<div class="callout orange">
+  <div class="callout-label">Template data available</div>
+  The template receives <code>.XR</code> (the composite resource), <code>.Params</code> (composition parameters), and <code>.Resources</code> (output from previous pipeline steps). Sprig functions like <code>default</code>, <code>join</code>, <code>replace</code>, <code>regexReplaceAll</code> are all available.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>5. Choosing Between Patch-and-Transform and Go-Templating</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<table>
+  <thead>
+    <tr><th>Scenario</th><th>Function</th><th>Why</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Map 5-10 fields from XR to VM spec</td>
+      <td>Patch-and-Transform</td>
+      <td>Simple, declarative, easy to review. No templates needed.</td>
+    </tr>
+    <tr>
+      <td>Create a disk for each item in an XR array</td>
+      <td>Go-Templating</td>
+      <td>Patches can't loop. Templates handle <code>range</code> natively.</td>
+    </tr>
+    <tr>
+      <td>Conditionally set evictionStrategy</td>
+      <td>Go-Templating</td>
+      <td>Templates have <code>if/else</code>. Patches have <code>optional</code> but can't branch.</td>
+    </tr>
+    <tr>
+      <td>Add labels, set constant values</td>
+      <td>Patch-and-Transform</td>
+      <td>These are single-field operations. Overkill for templates.</td>
+    </tr>
+    <tr>
+      <td>Generate random passwords for VM root user</td>
+      <td>Patch-and-Transform</td>
+      <td>Has a built-in <code>password</code> transform. No template needed.</td>
+    </tr>
+    <tr>
+      <td>Complex multi-resource orchestration</td>
+      <td>Both (pipeline)</td>
+      <td>Use Patch-and-Transform for field mapping, Go-Templating for dynamic resources.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout green">
+  <div class="callout-label">Practical recommendation for your VM stack</div>
+  Start with <strong>Patch-and-Transform</strong> for the basic VM spec (CPU, memory, disk size, storage class). Add <strong>Go-Templating</strong> only when you need dynamic features: multiple disks, conditional networking, or computed field values. You can mix both in the same pipeline — use Patch-and-Transform for simple mapping, then Go-Templating for the complex parts.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>6. Composition Functions: Installation on OpenShift</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Composition Functions run as pods in the cluster. They need to be installed before you can use them in Compositions.</p>
+
+<h3>Installation via xpkg</h3>
+
+<pre><code># Install the Patch-and-Transform function
+crossplane xpkg install-function \
+  crossplane/function-patch-and-transform:v0.14.0
+
+# Install the Go-Templating function
+crossplane xpkg install-function \
+  crossplane/function-go-templating:v0.40.0</code></pre>
+
+<p>This creates a <code>CompositionFunction</code> CR and deploys the function as a Deployment in the <code>crossplane-system</code> namespace. The function pods run as sidecars during composition rendering.</p>
+
+<h3>Permissions needed</h3>
+
+<p>Composition Functions need permissions to read XRs and write managed resources. Crossplane's function runtime handles most of this, but on OpenShift you need to ensure:</p>
+
+<ul>
+  <li>The <code>crossplane-system</code> ServiceAccount has <code>view</code> access to XRs and Claims</li>
+  <li>The function pods run with a ServiceAccount that has permissions to create/update the managed resource types (VirtualMachine, DataVolume, etc.)</li>
+  <li>OpenShift's SecurityContextConstraints (SCC) allow the function pods (usually <code>restricted</code> SCC is fine)</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>7. Try This: Design a Pipeline</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="callout orange">
+  <div class="callout-label">Exercise</div>
+  Design the pipeline steps for a VM Composition that needs to:
+  <ol>
+    <li>Create a VirtualMachine CR with CPU, memory, and basic disk</li>
+    <li>Create a DataVolume CR for the disk image download</li>
+    <li>Link the DataVolume's PVC name to the VirtualMachine's volume reference</li>
+    <li>Only set <code>evictionStrategy: LiveMigrate</code> if the XR has <code>spec.compute.liveMigrate: true</code></li>
+  </ol>
+  For each step, say which function you'd use and why. What would the patch config or template look like for the tricky parts?
+</div>
+
+<button class="answer-toggle" onclick="toggleAnswer('answers-002')">Show Answers ▾</button>
+<div id="answers-002" class="answer-panel" style="display:none;">
+
+<h2>Exercise 002: VM Composition Pipeline — Answer Key</h2>
+
+<h3>Step 1: <code>render-vm-template</code> — Function: <strong>Go-Templating</strong></h3>
+
+<p><strong>Why Go-Templating</strong>: We need a conditional (<code>evictionStrategy</code> only when <code>liveMigrate: true</code>) and we're building the full VM spec from scratch. Templates handle <code>if/else</code> natively; Patch-and-Transform cannot branch.</p>
+
+<pre><code>- step: render-vm-template
+  functionRef:
+    name: crossplane-function-go-templating
+  inputs:
+  - name: vm-base
+    ref:
+      kind: ConfigMap
+      apiVersion: v1
+      name: vm-render-template
+    mode: Rendered</code></pre>
+
+<pre><code># ConfigMap: vm-render-template
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vm-render-template
+data:
+  template.yaml: |
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+    metadata:
+      name: {{ .XR.metadata.name }}-vm
+      labels:
+        infra.example.com/managed-by: crossplane
+    spec:
+      running: true
+      {{- if .XR.spec.compute.liveMigrate }}
+      evictionStrategy: LiveMigrate
+      {{- end }}
+      template:
+        spec:
+          domain:
+            cpu:
+              cores: {{ .XR.spec.compute.vcpus }}
+            resources:
+              requests:
+                memory: {{ .XR.spec.compute.memory }}
+            devices:
+              disks:
+              - name: disk0
+                disk:
+                  bus: virtio
+          networks:
+          - name: default-network
+            pod: {}
+          volumes:
+          - name: disk0
+            dataVolume:
+              name: dv-placeholder  # patched in step 2</code></pre>
+
+<h3>Step 2: <code>patch-dv-reference</code> — Function: <strong>Patch-and-Transform</strong></h3>
+
+<p><strong>Why Patch-and-Transform</strong>: This is a simple field mapping — take the XR's storage image URL and put it into the DataVolume spec, then set the PVC size and storage class. No loops, no conditionals, just map fields.</p>
+
+<pre><code>- step: patch-dv-reference
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+  - name: datavolume
+    base:
+      apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataVolume
+      metadata:
+        labels:
+          infra.example.com/managed-by: crossplane
+        name: dv-{{ .XR.metadata.name }}
+      spec:
+        pvc:
+          accessModes:
+          - ReadWriteMany
+          resources:
+            requests:
+              storage: 1Gi
+          storageClassName: default
+        source:
+          http:
+            url: placeholder
+    functionConfigRef:
+      name: vm-dv-patch-config</code></pre>
+
+<pre><code># FunctionConfig: vm-dv-patch-config
+apiVersion: pkg.crossplane.io/v1beta1
+kind: FunctionConfig
+metadata:
+  name: vm-dv-patch-config
+spec:
+  patches:
+  - from: XR
+    to: spec.source.http.url
+    policy:
+      optional: false
+  - from: XR
+    to: spec.pvc.resources.requests.storage
+    policy:
+      optional: false
+  - from: XR
+    to: spec.pvc.storageClassName
+    policy:
+      optional: false
+  - type: const
+    const:
+      to: spec.pvc.accessModes[0]
+      val: ReadWriteMany</code></pre>
+
+<h3>Step 3: <code>link-dv-to-vm</code> — Function: <strong>Patch-and-Transform</strong></h3>
+
+<p><strong>Why Patch-and-Transform</strong>: This is a cross-resource connection — take the DataVolume's PVC name (output of step 2) and inject it into the VirtualMachine's volume reference. This is exactly what Patch-and-Transform's cross-resource patching is designed for.</p>
+
+<pre><code>- step: link-dv-to-vm
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+  - ref:
+      name: dv-{{ .XR.metadata.name }}
+      kind: DataVolume
+    policy:
+      optional: false
+  - ref:
+      name: {{ .XR.metadata.name }}-vm
+      kind: VirtualMachine
+    policy:
+      optional: false
+  functionConfigRef:
+    name: vm-link-patch-config</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Implementation note</div>
+  The exact field to use for the DV→VM link depends on the KubeVirt provider version. In some versions, the DataVolume's <code>status.pvc.name</code> is the field to reference. In others, you may need to use Crossplane's <code>connections</code> mechanism (declarative style) instead of pipeline steps.
+</div>
+
+<h3>Alternative: Pure Declarative (No Functions)</h3>
+
+<p>If the VM spec is simple enough (no conditionals, no dynamic resources), you can skip Composition Functions entirely and use the <strong>declarative</strong> style with a single Composition YAML:</p>
+
+<pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: vm-kubevirt
+  labels:
+    crossplane.io/xrd: xvirtualmachines.infra.example.com
+spec:
+  mode: Declarative
+  resources:
+  - name: virtualmachine
+    base:
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      spec:
+        running: true
+        template:
+          spec:
+            domain:
+              cpu:
+                cores: 1
+              resources:
+                requests:
+                  memory: 1Gi
+              devices:
+                disks:
+                - name: disk0
+                  disk:
+                    bus: virtio
+            volumes:
+            - name: disk0
+              dataVolume:
+                name: placeholder
+    patches:
+    - fromFieldPath: spec.parameters.compute.vcpus
+      toFieldPath: spec.template.spec.domain.cpu.cores
+    - fromFieldPath: spec.parameters.compute.memory
+      toFieldPath: spec.template.spec.domain.resources.requests.memory
+    - fromFieldPath: spec.parameters.compute.liveMigrate
+      toFieldPath: spec.evictionStrategy
+      transforms:
+      - type: map
+        map:
+          true: LiveMigrate
+    - fromFieldPath: metadata.name
+      toFieldPath: metadata.name
+      transforms:
+      - type: string
+        string:
+          fmt: "%s-vm"
+
+  - name: datavolume
+    base:
+      apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataVolume
+      spec:
+        pvc:
+          accessModes:
+          - ReadWriteMany
+          resources:
+            requests:
+              storage: 1Gi
+          storageClassName: default
+        source:
+          http:
+            url: https://placeholder
+    patches:
+    - fromFieldPath: metadata.name
+      toFieldPath: metadata.name
+      transforms:
+      - type: string
+        string:
+          fmt: "dv-%s"
+    - fromFieldPath: spec.parameters.storage.size
+      toFieldPath: spec.pvc.resources.requests.storage
+    - fromFieldPath: spec.parameters.storage.storageClass
+      toFieldPath: spec.pvc.storageClassName
+    - fromFieldPath: spec.parameters.storage.image
+      toFieldPath: spec.source.http.url
+    connections:
+    - fromFieldPath: metadata.name
+      toFieldPath: spec.template.spec.volumes[0].dataVolume.name
+      from: datavolume
+      to: virtualmachine</code></pre>
+
+<h3>Decision Matrix</h3>
+
+<table>
+  <thead>
+    <tr><th>Requirement</th><th>Function Choice</th><th>Rationale</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Build VM spec from XR fields</td>
+      <td>Go-Templating (step 1)</td>
+      <td>Template handles the full spec in one render; conditional evictionStrategy</td>
+    </tr>
+    <tr>
+      <td>Create DataVolume with XR values</td>
+      <td>Patch-and-Transform (step 2)</td>
+      <td>Simple field mapping, no loops or branching needed</td>
+    </tr>
+    <tr>
+      <td>Link DV PVC → VM volume</td>
+      <td>Patch-and-Transform (step 3)</td>
+      <td>Cross-resource field injection is its specialty</td>
+    </tr>
+    <tr>
+      <td>Simple VM, no conditionals</td>
+      <td>Declarative (no functions)</td>
+      <td>Simpler and more auditable for straightforward mappings</td>
+    </tr>
+  </tbody>
+</table>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>8. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>After you work through the exercise, our next topics will be:</p>
+<ul>
+  <li><strong>Provider installation on OpenShift</strong> — RBAC, ServiceAccounts, ProviderConfig, and the KubeVirt provider's requirements</li>
+  <li><strong>ArgoCD App-of-Apps bootstrap</strong> — concrete YAML for bootstrapping the entire stack from Git</li>
+</ul>
+
+</body>
+</html>

@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XRD Creation & Processing Pipeline — Crossplane + ArgoCD + OpenShift Virtualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+    color: var(--accent-cyan);
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+    padding: 0.75rem 1rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.green {
+    border-left-color: var(--accent-green);
+    background: rgba(63, 185, 80, 0.06);
+  }
+  .callout.orange {
+    border-left-color: var(--accent-orange);
+    background: rgba(210, 153, 34, 0.06);
+  }
+  .callout.red {
+    border-left-color: var(--accent-red);
+    background: rgba(248, 81, 73, 0.06);
+  }
+  .callout-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 1.5rem 0;
+  }
+  .pipeline-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .pipeline-step:last-child { border-bottom: none; }
+  .step-number {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+  .step-number.blue { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+  .step-number.green { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); }
+  .step-number.orange { background: rgba(210, 153, 34, 0.15); color: var(--accent-orange); }
+  .step-number.purple { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); }
+  .step-number.cyan { background: rgba(57, 210, 192, 0.15); color: var(--accent-cyan); }
+  .step-content h3 { margin-top: 0; margin-bottom: 0.4rem; }
+  .step-content p { margin-bottom: 0.5rem; }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+  .diagram-title {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+  }
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+  }
+  .flow-box {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .flow-box.user { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); border: 1px solid rgba(188, 140, 255, 0.3); }
+  .flow-box.crossplane { background: rgba(88, 166, 255, 0.15); color: var(--accent); border: 1px solid rgba(88, 166, 255, 0.3); }
+  .flow-box.composition { background: rgba(210, 153, 34, 0.15); color: var(--accent-orange); border: 1px solid rgba(210, 153, 34, 0.3); }
+  .flow-box.provider { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
+  .flow-box.runtime { background: rgba(57, 210, 192, 0.15); color: var(--accent-cyan); border: 1px solid rgba(57, 210, 192, 0.3); }
+  .flow-arrow { color: var(--text-muted); font-size: 1.2rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td { background: var(--bg); }
+  ul, ol {
+    margin: 0.5rem 0 1rem 1.5rem;
+  }
+  li { margin-bottom: 0.4rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .answer-toggle {
+    display: inline-block;
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--accent-orange);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 1rem 0;
+    transition: background 0.2s;
+  }
+  .answer-toggle:hover {
+    background: rgba(210, 153, 34, 0.25);
+  }
+  .answer-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .answer-panel h2 {
+    margin-top: 1.5rem;
+    font-size: 1.2rem;
+  }
+  .answer-panel h3 {
+    font-size: 1rem;
+    color: var(--accent-orange);
+  }
+  .answer-panel pre {
+    font-size: 0.8rem;
+  }
+  .answer-table {
+    font-size: 0.85rem;
+  }
+  .answer-table th {
+    background: rgba(210, 153, 34, 0.1);
+    color: var(--accent-orange);
+  }
+  .answer-table td {
+    background: var(--bg);
+  }
+</style>
+<script>
+  function toggleAnswer(id) {
+    var panel = document.getElementById(id);
+    var btn = panel.previousElementSibling;
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      btn.textContent = 'Hide Answers ▴';
+    } else {
+      panel.style.display = 'none';
+      btn.textContent = 'Show Answers ▾';
+    }
+  }
+</script>
+</style>
+</head>
+<body>
+
+<h1>XRD Creation &amp; Processing Pipeline</h1>
+
+<p>This explainer walks through the complete lifecycle of a Crossplane-managed VM — from the moment an XRD is defined to the moment a VirtualMachine CR runs on OpenShift. We'll follow the data flow through every component in the stack.</p>
+
+<div class="callout">
+  <div class="callout-label">Prerequisite knowledge</div>
+  You know what CRDs are and have some Crossplane reading under your belt. This explainer bridges that knowledge into a concrete, end-to-end mental model of the XRD pipeline.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>1. The Big Picture: Where Each Component Lives</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="diagram">
+  <div class="diagram-title">Stack Architecture</div>
+  <div class="flow">
+    <span class="flow-box user">You / Git</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box crossplane">ArgoCD</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box crossplane">Crossplane</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box provider">KubeVirt Provider</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box runtime">OpenShift Virtualization</span>
+  </div>
+</div>
+
+<p>Four layers, each with a distinct responsibility:</p>
+
+<table>
+  <thead>
+    <tr><th>Layer</th><th>Role</th><th>What it manages</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Git (source of truth)</strong></td>
+      <td>Declarative intent</td>
+      <td>Claims, XRDs, Compositions, ArgoCD Application manifests</td>
+    </tr>
+    <tr>
+      <td><strong>ArgoCD</strong></td>
+      <td>GitOps sync</td>
+      <td>Watches Git, applies manifests to the cluster, ensures drift is corrected</td>
+    </tr>
+    <tr>
+      <td><strong>Crossplane</strong></td>
+      <td>Abstraction &amp; orchestration</td>
+      <td>Reconciles Claims → XRs → Compositions → Managed Resources</td>
+    </tr>
+    <tr>
+      <td><strong>KubeVirt Provider + OpenShift Virt</strong></td>
+      <td>Infrastructure API</td>
+      <td>Creates and manages VirtualMachine CRs, DataVolumes, networking on OpenShift</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout green">
+  <div class="callout-label">Key insight</div>
+  ArgoCD never touches VMs directly. It syncs <em>Crossplane manifests</em> (XRDs, Compositions, Claims). Crossplane then translates those into KubeVirt resources. ArgoCD is the GitOps conveyor belt; Crossplane is the factory.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>2. Step-by-Step: The XRD Processing Pipeline</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="pipeline">
+
+  <div class="pipeline-step">
+    <div class="step-number purple">1</div>
+    <div class="step-content">
+      <h3>Author the XRD (Composite Resource Definition)</h3>
+      <p>The XRD is the contract. It defines the shape of the infrastructure API you're building. It declares:</p>
+      <ul>
+        <li><strong>Names</strong> — the API group and kind (e.g., <code>vm.infra.example.com</code>)</li>
+        <li><strong>Spec schema</strong> — what fields users fill in (CPU, memory, disk size, image)</li>
+        <li><strong>Status shape</strong> — what fields Crossplane reports back (IP, running state, conditions)</li>
+        <li><strong>Composition reference</strong> — which Composition handles instances of this XRD</li>
+      </ul>
+      <pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xvirtualmachines.infra.example.com
+spec:
+  group: infra.example.com
+  names:
+    kind: XVirtualMachine
+    plural: xvirtualmachines
+  claimNames:
+    kind: VirtualMachineClaim
+    plural: virtualmachineclaims
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true   # ← XRs of this version can be referenced by other resources
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required:
+            - compute
+            - storage
+            properties:
+              compute:
+                type: object
+                properties:
+                  vcpus:
+                    type: integer
+                    description: Number of virtual CPUs
+                  memory:
+                    type: string
+                    description: e.g., "8Gi"
+              storage:
+                type: object
+                properties:
+                  size:
+                    type: string
+                    description: e.g., "50Gi"
+                  storageClass:
+                    type: string
+                    description: OpenShift StorageClass name
+                  image:
+                    type: string
+                    description: DataVolume source URL or PVC name
+              network:
+                type: object
+                properties:
+                  macAddress:
+                    type: string
+                    description: Optional fixed MAC address
+          status:
+            type: object
+            properties:
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                    reason:
+                      type: string
+              endpoint:
+                type: string
+                description: VM IP or hostname</code></pre>
+      <div class="callout">
+        <div class="callout-label">XRD design note</div>
+        The <code>claimNames</code> field is what makes this an XRD rather than a plain CRD. It tells Crossplane: "users create <code>VirtualMachineClaim</code> resources, and I'll create the underlying <code>XVirtualMachine</code> XRs automatically." Without <code>claimNames</code>, users would need to create XRs directly — bypassing the abstraction layer.
+      </div>
+    </div>
+  </div>
+
+  <div class="pipeline-step">
+    <div class="step-number purple">2</div>
+    <div class="step-content">
+      <h3>ArgoCD syncs the XRD to the cluster</h3>
+      <p>ArgoCD watches your Git repository. When it sees the XRD manifest, it applies it to the cluster's API server. Crossplane's <code>xrd-controller</code> then picks it up:</p>
+      <ul>
+        <li>Crossplane creates the corresponding <strong>managed CRD</strong> in the cluster (e.g., <code>xvirtualmachines.infra.example.com</code>)</li>
+        <li>Crossplane creates the <strong>claim CRD</strong> (e.g., <code>virtualmachineclaims.infra.example.com</code>)</li>
+        <li>Both CRDs are now available for users to create instances of</li>
+      </ul>
+      <div class="callout orange">
+        <div class="callout-label">ArgoCD's role here</div>
+        ArgoCD is only ensuring the XRD manifest exists in the cluster. It has no understanding of Crossplane semantics — it just applies YAML. The actual CRD generation is done entirely by Crossplane's xrd-controller reconciling the XRD object.
+      </div>
+    </div>
+  </div>
+
+  <div class="pipeline-step">
+    <div class="step-number purple">3</div>
+    <div class="step-content">
+      <h3>Author the Composition</h3>
+      <p>The Composition is the recipe. It tells Crossplane what concrete resources to create when an XR is reconciled. For a VM, the Composition typically creates:</p>
+      <ul>
+        <li>A <strong>KubeVirt VirtualMachine</strong> CR (the VM definition)</li>
+        <li>A <strong>DataVolume</strong> CR (the disk image source)</li>
+        <li>Optionally a <strong>PersistentVolumeClaim</strong> for additional storage</li>
+        <li>Optionally networking resources (Service, Ingress, or OpenShift Route)</li>
+      </ul>
+      <p>The Composition uses <strong>patches</strong> to map fields from the XR's spec to the managed resource specs, and <strong>connections</strong> to pass outputs from one resource to another.</p>
+      <pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: vm-kubevirt
+  labels:
+    crossplane.io/xrd: xvirtualmachines.infra.example.com
+    infra.example.com/kubevirt: "true"
+spec:
+  compositeResourceSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+  mode: Pipeline
+  pipeline:
+  - step: render-virtualmachine
+    functionRef:
+      name: crossplane-kubevirt-function
+    inputs:
+    - name: vm-spec
+      ref:
+        name: vm-template
+        kind: Manifest
+        apiVersion: delivery.crossplane.io/v1alpha1
+      base:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          labels:
+            infra.example.com/managed-by: crossplane
+        spec:
+          running: true
+          template:
+            spec:
+              domain:
+                devices:
+                  disks:
+                  - name: disk0
+                    disk:
+                      bus: virtio
+              evictionStrategy: LiveMigrate
+              networks:
+              - name: default-network
+                pod: {}
+              terminationGracePeriodSeconds: 30
+              volumes:
+              - name: disk0
+                dataVolume:
+                  name: placeholder
+    - step: patch-vm-from-xr
+      functionRef:
+        name: crossplane-function-patch-and-transform
+      inputs:
+        functionConfigRef:
+          name: vm-patch-config
+    - step: create-datavolume
+      functionRef:
+        name: crossplane-function-patch-and-transform
+      inputs:
+        functionConfigRef:
+          name: dv-patch-config
+    - step: reconcile
+      functionRef:
+        name: crossplane-function-go-templating
+      inputs:
+        resources:
+        - name: vm
+          base:
+            apiVersion: kubevirt.io/v1
+            kind: VirtualMachine
+        - name: dv
+          base:
+            apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataVolume</code></pre>
+      <div class="callout">
+        <div class="callout-label">Composition modes</div>
+        <strong>Declarative</strong> (old style): uses <code>resources</code> array with <code>patches</code> and <code>connections</code> — pure YAML, no functions. Simpler but limited to field-level transforms.<br>
+        <strong>Pipeline</strong> (new style): uses <code>steps</code> with <code>functionRef</code> — allows imperative logic, loops, conditionals. More flexible, requires Composition Function controllers.
+      </div>
+    </div>
+  </div>
+
+  <div class="pipeline-step">
+    <div class="step-number purple">4</div>
+    <div class="step-content">
+      <h3>ArgoCD syncs the Composition to the cluster</h3>
+      <p>Same pattern as the XRD — ArgoCD applies the Composition manifest. Crossplane's controller reads the <code>crossplane.io/xrd</code> label to know which XRD this Composition belongs to. The Composition is now "attached" and ready to process XRs.</p>
+    </div>
+  </div>
+
+  <div class="pipeline-step">
+    <div class="step-number purple">5</div>
+    <div class="step-content">
+      <h3>User creates a Claim (or ArgoCD syncs it from Git)</h3>
+      <p>The user (or an ArgoCD Application) creates a <code>VirtualMachineClaim</code>. This is the user-facing resource — it uses the simplified schema defined in the XRD, not the full KubeVirt spec.</p>
+      <pre><code>apiVersion: infra.example.com/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: web-server
+  namespace: workloads
+spec:
+  compositionSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+  parameters:
+    compute:
+      vcpus: 4
+      memory: "8Gi"
+    storage:
+      size: "50Gi"
+      storageClass: ocs.external.ceph.rook.io
+      image: "https://example.com/centos-stream-9.qcow2"
+    network:
+      macAddress: "52:54:00:ab:cd:ef"</code></pre>
+      <p>When the Claim is created, Crossplane's controller:</p>
+      <ul>
+        <li>Creates an <strong>XVirtualMachine</strong> (the XR) in the <code>crossplane-system</code> namespace (or the Claim's namespace, depending on configuration)</li>
+        <li>Copies the Claim's <code>spec.parameters</code> into the XR's <code>spec</code></li>
+        <li>Links the XR to the Composition via the selector label</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="pipeline-step">
+    <div class="step-number purple">6</div>
+    <div class="step-content">
+      <h3>Crossplane reconciles the XR against its Composition</h3>
+      <p>This is where the magic happens. Crossplane's XR controller calls the Composition's pipeline (or applies its declarative resources):</p>
+      <ol>
+        <li><strong>Render phase:</strong> The Composition template is instantiated with the XR's spec values. Patches map <code>spec.compute.vcpus</code> → VirtualMachine spec's <code>domain.cpu.cores</code>, <code>spec.storage.size</code> → PVC size, etc.</li>
+        <li><strong>Apply phase:</strong> Crossplane creates/updates the managed resources (VirtualMachine CR, DataVolume CR) in the cluster using the KubeVirt provider's controller.</li>
+        <li><strong>Observe phase:</strong> Crossplane reads the status of the managed resources and writes it back to the XR's <code>status</code>.</li>
+        <li><strong>Propagate phase:</strong> The XR's status is copied back to the Claim's <code>status</code>, so the user sees the result.</li>
+      </ol>
+      <div class="diagram">
+        <div class="diagram-title">Reconciliation Loop</div>
+        <div class="flow">
+          <span class="flow-box crossplane">XR Controller</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-box composition">Composition Pipeline</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-box provider">KubeVirt Provider</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-box runtime">KubeVirt Controller</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-box runtime">libvirt / VM</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pipeline-step">
+    <div class="step-number purple">7</div>
+    <div class="step-content">
+      <h3>KubeVirt runs the VM on OpenShift</h3>
+      <p>The KubeVirt controller (part of OpenShift Virtualization) observes the VirtualMachine CR created by Crossplane and:</p>
+      <ul>
+        <li>Resolves the DataVolume (downloads or clones the disk image)</li>
+        <li>Creates a <code>VirtualMachineInstance</code> (VMI) CR — this is the actual running VM</li>
+        <li>Provisions the VM using libvirt on an OpenShift node</li>
+        <li>Manages the VM lifecycle (start, stop, migrate, snapshot)</li>
+      </ul>
+      <p>The VM is now running. Crossplane continues to reconcile periodically, ensuring the actual state matches the desired state declared in the Claim.</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>3. The Data Flow: Field Mapping Walkthrough</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Here's exactly how a field flows from Claim to running VM:</p>
+
+<table>
+  <thead>
+    <tr><th>Step</th><th>Resource</th><th>Field Path</th><th>Value</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Claim</td>
+      <td><code>VirtualMachineClaim</code></td>
+      <td><code>spec.parameters.compute.vcpus</code></td>
+      <td><code>4</code></td>
+    </tr>
+    <tr>
+      <td>XR</td>
+      <td><code>XVirtualMachine</code></td>
+      <td><code>spec.compute.vcpus</code></td>
+      <td><code>4</code> (copied from Claim)</td>
+    </tr>
+    <tr>
+      <td>Composition</td>
+      <td><code>Patch</code></td>
+      <td>Maps <code>spec.compute.vcpus</code> → <code>resources.vm.spec.template.spec.domain.cpu.cores</code></td>
+      <td><code>4</code></td>
+    </tr>
+    <tr>
+      <td>Managed Resource</td>
+      <td><code>VirtualMachine</code></td>
+      <td><code>spec.template.spec.domain.cpu.cores</code></td>
+      <td><code>4</code></td>
+    </tr>
+    <tr>
+      <td>KubeVirt</td>
+      <td><code>VirtualMachineInstance</code></td>
+      <td><code>spec.domain.cpu.cores</code></td>
+      <td><code>4</code> (applied to libvirt domain)</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>4. Where ArgoCD Fits in the Full GitOps Flow</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>ArgoCD operates at two levels in this stack:</p>
+
+<h3>Level 1: Infrastructure Bootstrap (one-time or periodic)</h3>
+<p>ArgoCD syncs the Crossplane infrastructure manifests from Git:</p>
+<ul>
+  <li><code>crossplane/</code> — Provider installations, ProviderConfigs, CompositionFunctions</li>
+  <li><code>xrd/</code> — XRD definitions</li>
+  <li><code>compositions/</code> — Composition manifests</li>
+  <li><code>providers/</code> — ProviderConfig (credentials, connection info)</li>
+</ul>
+
+<h3>Level 2: Workload Provisioning (per-VM)</h3>
+<p>ArgoCD syncs individual VM Claims from Git. Each VM is a separate manifest in a namespaced directory:</p>
+<pre><code>infrastructure/
+├── crossplane/
+│   ├── provider-kubevirt.yaml
+│   ├── provider-config.yaml
+│   └── composition-functions.yaml
+├── xrd/
+│   └── xvirtualmachine.yaml
+├── compositions/
+│   └── vm-kubevirt.yaml
+└── workloads/
+    ├── web-server/
+    │   └── claim.yaml
+    ├── db-server/
+    │   └── claim.yaml
+    └── app-server/
+        └── claim.yaml</code></pre>
+
+<p>An ArgoCD <strong>App-of-Apps</strong> Application points to the <code>infrastructure/</code> and <code>workloads/</code> directories, creating child Applications for each.</p>
+
+<div class="callout green">
+  <div class="callout-label">GitOps flow summary</div>
+  Developer commits a Claim YAML to Git → ArgoCD detects the change → ArgoCD applies the Claim to the cluster → Crossplane reconciles the Claim → Crossplane creates the XR → Composition renders managed resources → KubeVirt provider applies them → VM runs on OpenShift. The entire chain is driven by a Git commit.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>5. Key Design Decisions for Your Task Plan</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>As you build your task plan, these decisions will come up:</p>
+
+<table>
+  <thead>
+    <tr><th>Decision</th><th>Options</th><th>Considerations</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Composition style</td>
+      <td>Declarative (patches) vs. Pipeline (functions)</td>
+      <td>Pipeline is more powerful but adds operator complexity. Start declarative if your VM spec is straightforward.</td>
+    </tr>
+    <tr>
+      <td>Claim namespace</td>
+      <td>Single namespace vs. multi-tenant</td>
+      <td>Crossplane supports RBAC per namespace. For on-prem with multiple teams, plan namespace isolation early.</td>
+    </tr>
+    <tr>
+      <td>ProviderConfig auth</td>
+      <td>ServiceAccount vs. kubeconfig secret</td>
+      <td>On OpenShift, ServiceAccount with appropriate RBAC is the recommended approach. The KubeVirt provider needs permissions to manage VirtualMachine, DataVolume, and CDI resources.</td>
+    </tr>
+    <tr>
+      <td>Storage provisioning</td>
+      <td>DataVolume downloads vs. pre-provisioned PVCs</td>
+      <td>DataVolume downloads are flexible but slow. Pre-provisioned PVCs with base images are faster for standardized VMs.</td>
+    </tr>
+    <tr>
+      <td>ArgoCD sync strategy</td>
+      <td>Auto-sync vs. manual approval</td>
+      <td>For production VMs, manual approval for the workloads layer prevents accidental VM creation/deletion.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>6. Try This: Map a Field Yourself</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="callout orange">
+  <div class="callout-label">Exercise</div>
+  Take the <code>spec.parameters.storage.image</code> field from the Claim example above. Trace it through the pipeline:
+  <ol>
+    <li>How does it get from the Claim to the XR?</li>
+    <li>How would the Composition patch it into the DataVolume CR?</li>
+    <li>What does the DataVolume spec look like with that field populated?</li>
+  </ol>
+  Think through the answer, then tell me — I'll give you feedback.
+</div>
+
+<button class="answer-toggle" onclick="toggleAnswer('answers-001')">Show Answers ▾</button>
+<div id="answers-001" class="answer-panel" style="display:none;">
+
+<h2>Exercise 001: XRD Pipeline Trace — Answer Key</h2>
+
+<h3>Step 1: Claim → XR (Crossplane's claim controller)</h3>
+
+<p>When the <code>VirtualMachineClaim</code> is created, Crossplane's <strong>claim controller</strong> detects it and automatically creates an <code>XVirtualMachine</code> (the composite resource). The controller copies the Claim's <code>spec.parameters</code> block directly into the XR's <code>spec</code> block.</p>
+
+<pre><code># Claim (user-facing)
+apiVersion: infra.example.com/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: web-server
+  namespace: workloads
+spec:
+  compositionSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+  parameters:
+    storage:
+      image: "https://example.com/centos-stream-9.qcow2"
+      size: "50Gi"
+      storageClass: ocs.external.ceph.rook.io
+
+# XR (created by Crossplane, hidden from user)
+apiVersion: infra.example.com/v1alpha1
+kind: XVirtualMachine
+metadata:
+  name: xvirtualmachine-web-server
+  namespace: crossplane-system
+spec:
+  compositionSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+  storage:
+    image: "https://example.com/centos-stream-9.qcow2"
+    size: "50Gi"
+    storageClass: ocs.external.ceph.rook.io</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Key point</div>
+  The claim controller does a <strong>shallow copy</strong> of <code>spec.parameters</code> into <code>spec</code>. No transformation happens here — it's a direct field migration.
+</div>
+
+<h3>Step 2: Composition Patch (XR → DataVolume)</h3>
+
+<p>The Composition's patch maps the XR field path to the DataVolume field path. The mapping is <strong>not 1:1</strong> — the XRD uses <code>spec.storage.image</code> while the CDI API uses <code>spec.source.http.url</code>.</p>
+
+<pre><code># FunctionConfig referenced by the Composition step
+apiVersion: pkg.crossplane.io/v1beta1
+kind: FunctionConfig
+metadata:
+  name: vm-dv-patch-config
+spec:
+  patches:
+  - from: XR
+    to: spec.source.http.url
+    policy:
+      optional: false</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Key point</div>
+  The patch bridges two different API schemas. This translation layer is the core job of the Composition.
+</div>
+
+<h3>Step 3: Resulting DataVolume CR</h3>
+
+<pre><code>apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: dv-web-server-centos-stream-9
+  labels:
+    infra.example.com/managed-by: crossplane
+spec:
+  source:
+    http:
+      url: "https://example.com/centos-stream-9.qcow2"
+  pvc:
+    accessModes:
+    - ReadWriteMany
+    resources:
+      requests:
+        storage: 50Gi
+    storageClassName: ocs.external.ceph.rook.io</code></pre>
+
+<h3>Complete Field Flow</h3>
+
+<pre><code>Claim.spec.parameters.storage.image
+  │
+  │  (claim controller: shallow copy spec.parameters → spec)
+  ▼
+XR.spec.storage.image
+  │
+  │  (Composition patch: spec.storage.image → spec.source.http.url)
+  ▼
+DataVolume.spec.source.http.url
+  │
+  │  (CDI controller: downloads image, creates PVC)
+  ▼
+PVC backed by downloaded qcow2 image</code></pre>
+
+<h3>Common Pitfalls</h3>
+
+<ul>
+  <li><strong>URL accessibility</strong>: The URL must be reachable from OpenShift cluster nodes, not the user's machine.</li>
+  <li><strong>TLS verification</strong>: CDI verifies TLS by default. Self-signed certs require CA injection or <code>insecure: true</code>.</li>
+  <li><strong>Image format</strong>: CDI supports qcow2, raw, and vmdk. Unsupported formats must be converted first.</li>
+  <li><strong>Download timeout</strong>: Large images may exceed CDI's default timeout. Adjust <code>spec.individualPVDownloadTimeout</code> for images larger than a few GB.</li>
+</ul>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>7. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>After you work through the exercise, our next explainer will cover:</p>
+<ul>
+  <li><strong>Composition Functions deep-dive</strong> — Patch-and-Transform, Go-Templating, and when to use each</li>
+  <li><strong>Provider installation on OpenShift</strong> — RBAC, ServiceAccounts, and the KubeVirt provider's requirements</li>
+  <li><strong>ArgoCD App-of-Apps bootstrap pattern</strong> — concrete YAML for bootstrapping the entire stack from Git</li>
+</ul>
+
+</body>
+</html>
