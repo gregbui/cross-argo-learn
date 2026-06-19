@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Application-Level VM Workload Development</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+    color: var(--accent-cyan);
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+    padding: 0.75rem 1rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.green {
+    border-left-color: var(--accent-green);
+    background: rgba(63, 185, 80, 0.06);
+  }
+  .callout.orange {
+    border-left-color: var(--accent-orange);
+    background: rgba(210, 153, 34, 0.06);
+  }
+  .callout.red {
+    border-left-color: var(--accent-red);
+    background: rgba(248, 81, 73, 0.06);
+  }
+  .callout-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+  .diagram-title {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+  }
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+  }
+  .flow-box {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .flow-box.git { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); border: 1px solid rgba(188, 140, 255, 0.3); }
+  .flow-box.argocd { background: rgba(88, 166, 255, 0.15); color: var(--accent); border: 1px solid rgba(88, 166, 255, 0.3); }
+  .flow-box.crossplane { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
+  .flow-box.runtime { background: rgba(57, 210, 192, 0.15); color: var(--accent-cyan); border: 1px solid rgba(57, 210, 192, 0.3); }
+  .flow-box.image { background: rgba(248, 81, 73, 0.15); color: var(--accent-red); border: 1px solid rgba(248, 81, 73, 0.3); }
+  .flow-arrow { color: var(--text-muted); font-size: 1.2rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td { background: var(--bg); }
+  ul, ol {
+    margin: 0.5rem 0 1rem 1.5rem;
+  }
+  li { margin-bottom: 0.4rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .answer-toggle {
+    display: inline-block;
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--accent-orange);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 1rem 0;
+    transition: background 0.2s;
+  }
+  .answer-toggle:hover {
+    background: rgba(210, 153, 34, 0.25);
+  }
+  .answer-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .answer-panel h2 {
+    margin-top: 1.5rem;
+    font-size: 1.2rem;
+  }
+  .answer-panel h3 {
+    font-size: 1rem;
+    color: var(--accent-orange);
+  }
+  .answer-panel pre {
+    font-size: 0.8rem;
+  }
+  .answer-table {
+    font-size: 0.85rem;
+  }
+  .answer-table th {
+    background: rgba(210, 153, 34, 0.1);
+    color: var(--accent-orange);
+  }
+  .answer-table td {
+    background: var(--bg);
+  }
+</style>
+<script>
+  function toggleAnswer(id) {
+    var panel = document.getElementById(id);
+    var btn = panel.previousElementSibling;
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      btn.textContent = 'Hide Answers ▴';
+    } else {
+      panel.style.display = 'none';
+      btn.textContent = 'Show Answers ▾';
+    }
+  }
+</script>
+</head>
+<body>
+
+<h1>Application-Level VM Workload Development</h1>
+
+<p>Now that OS image preparation and guest tools are in scope, this explainer covers how VM workloads are built, configured, and managed within the Crossplane + ArgoCD + OpenShift Virtualization stack. You'll learn about OS images, cloud-init, QEMU guest agent, and how these integrate with your XRD and Composition design.</p>
+
+<div class="callout">
+  <div class="callout-label">What this adds to the stack</div>
+  Previously, we treated VMs as black boxes — the Composition created a VirtualMachine CR and KubeVirt ran it. Now we're looking inside the VM: how it boots, how it's configured on first boot, how it communicates with the host, and how images are managed at scale.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>1. The VM Workload Stack</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>A VM workload is more than just a VirtualMachine CR. It's a stack of layers:</p>
+
+<div class="diagram">
+  <div class="diagram-title">VM Workload Layers</div>
+  <div style="display: flex; flex-direction: column; gap: 0.5rem; align-items: center;">
+    <div class="flow"><span class="flow-box git">Git: Claim YAML + image config</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box argocd">ArgoCD syncs Claim</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box crossplane">Crossplane creates VM CR + DataVolume</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box image">Disk Image (qcow2) with cloud-init support</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box runtime">QEMU Guest Agent + virtio drivers</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box runtime">Guest OS (CentOS, RHEL, Ubuntu, Windows)</span></div>
+  </div>
+</div>
+
+<p>Each layer has decisions that affect how the VM behaves, is managed, and integrates with the stack.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>2. OS Image Preparation</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<h3>Image Format: qcow2</h3>
+
+<p>KubeVirt's preferred image format is <strong>qcow2</strong>. It supports:</p>
+
+<ul>
+  <li><strong>Copy-on-write</strong> — multiple VMs can share a base image, saving storage</li>
+  <li><strong>Compression</strong> — smaller disk images reduce download time and storage</li>
+  <li><strong>Snapshots</strong> — KubeVirt snapshots require qcow2 format</li>
+  <li><strong>Cloud-init</strong> — the <code>cloud-init</code> drive is injected as a secondary qcow2 disk</li>
+</ul>
+
+<h3>Cloud-Init Support</h3>
+
+<p><strong>cloud-init</strong> is the standard tool for configuring VMs on first boot. It runs when the VM starts for the first time and configures:</p>
+
+<ul>
+  <li>Hostname, SSH keys, users</li>
+  <li>Network configuration (static IP, DNS)</li>
+  <li>Package installation, script execution</li>
+  <li>Yum/DNF repository configuration</li>
+</ul>
+
+<p>For cloud-init to work, the base image must have cloud-init installed and the <code>cloud-init</code> service enabled:</p>
+
+<pre><code># On the base image (built with Packer, osc image-tee, or manual):
+dnf install -y cloud-init
+systemctl enable cloud-init
+systemctl enable cloud-config
+systemctl enable cloud-final
+
+# Disable cloud-init's network configuration if OpenShift SDN handles networking
+# (otherwise cloud-init may override the pod network settings)
+echo "network_config_source: [cloud-init]" >> /etc/cloud/cloud.cfg.d/99-custom-networking.cfg</code></pre>
+
+<div class="callout red">
+  <div class="callout-label">Critical: cloud-init vs. OpenShift networking</div>
+  On OpenShift, the pod network (SDN/OVN-Kubernetes) handles VM networking. If cloud-init's network configuration runs, it may try to set up its own network interfaces, conflicting with OpenShift's pod network. Either:
+  <ul>
+    <li><strong>Disable cloud-init networking:</strong> Set <code>network: {config: disabled}</code> in cloud-init config</li>
+    <li><strong>Use a custom cloud-init config</strong> that only configures hostname, SSH keys, and user data — not networking</li>
+  </ul>
+  This is one of the most common gotchas when running VMs on OpenShift.
+</div>
+
+<h3>Building Base Images</h3>
+
+<p>There are several approaches to building base images for KubeVirt:</p>
+
+<table>
+  <thead>
+    <tr><th>Method</th><th>Tool</th><th>Best For</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Official cloud images</td>
+      <td>Download from vendor</td>
+      <td>Quick start, CentOS Stream, Ubuntu Cloud</td>
+    </tr>
+    <tr>
+      <td>Packer</td>
+      <td>HashiCorp Packer with QEMU builder</td>
+      <td>Custom images with automated provisioning</td>
+    </tr>
+    <tr>
+      <td>OSBuild/Compose</td>
+      <td>Red Hat OSBuild, Fedora Image Builder</td>
+      <td>RHEL-based images with compliance scanning</td>
+    </tr>
+    <tr>
+      <td>Container-to-VM</td>
+      <td><code>oc image export</code> + manual conversion</td>
+      <td>Converting container base layers to VM images</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>3. QEMU Guest Agent</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The <strong>QEMU guest agent</strong> (qga) runs inside the VM and provides a communication channel between the VM and the host (KubeVirt controller). It enables:</p>
+
+<ul>
+  <li><strong>File system freeze/thaw</strong> — for consistent snapshots (runs fsfreeze before taking a snapshot)</li>
+  <li><strong>Guest OS info</strong> — reports guest OS type, hostname, IP addresses, running processes</li>
+  <li><strong>Guest shutdown</strong> — graceful OS shutdown via the KubeVirt API</li>
+  <li><strong>Guest network config</strong> — read IP addresses from inside the guest</li>
+  <li><strong>Guest user/password changes</strong> — change passwords from the host</li>
+</ul>
+
+<p>For the guest agent to work, the VM must have:</p>
+
+<ol>
+  <li><strong>Guest agent installed in the OS:</strong></li>
+</ol>
+
+<pre><code># RHEL/CentOS
+dnf install -y qemu-guest-agent
+systemctl enable --now qemu-guest-agent
+
+# Ubuntu
+apt install -y qemu-guest-agent
+systemctl enable --now qemu-guest-agent</code></pre>
+
+<ol start="2">
+  <li><strong>Serial console configured in the VM spec:</strong></li>
+</ol>
+
+<pre><code>spec:
+  template:
+    spec:
+      domain:
+        devices:
+          interfaces:
+          - masquerade: {}
+            name: default
+          disks:
+          - name: rootdisk
+            disk:
+              bus: virtio
+          - name: cloudinitdisk
+            disk:
+              bus: virtio
+        serials:
+        - name: serial0
+          serial: ttyS0
+        console:
+        - name: serial0
+          consoleType: serial
+          port: 0</code></pre>
+
+<ol start="3">
+  <li><strong>Guest agent enabled in the VirtualMachine spec:</strong></li>
+</ol>
+
+<pre><code>spec:
+  running: true
+  template:
+    spec:
+      domain:
+        devices:
+          interfaces:
+          - masquerade: {}
+            name: default
+          # Guest agent channel
+          autoattachGuestAgentInstance: true</code></pre>
+
+<div class="callout green">
+  <div class="callout-label">Why this matters for your XRD</div>
+  The guest agent is what enables Crossplane to report accurate status back to the Claim (IP addresses, running state). Without it, Crossplane can only report the VirtualMachine CR's phase (Running, Stopped) but not the guest's actual state (IP, hostname, disk usage). Consider adding guest-agent status fields to your XRD's status schema.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>4. Cloud-Init in a Crossplane Composition</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Cloud-init configuration is passed to the VM via a <strong>cloud-init user-data drive</strong>. In a Crossplane Composition, this is typically handled by the Go-Templating function:</p>
+
+<pre><code># In the Composition's Go-Templating step, inject cloud-init user-data:
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vm-cloudinit-template
+data:
+  user-data.yaml: |
+    #cloud-config
+    hostname: {{ .XR.metadata.name }}
+    fqdn: {{ .XR.metadata.name }}.{{ .XR.metadata.namespace }}.svc.cluster.local
+    users:
+    - name: {{ .XR.spec.guest.adminUser | default "cloud-user" }}
+      ssh-authorized-keys:
+      {{- range .XR.spec.guest.sshKeys }}
+      - {{ . }}
+      {{- end }}
+      sudo: ['ALL=(ALL)']
+      shell: /bin/bash
+    chpasswd:
+      expire: true
+    package_update: true
+    package_upgrade: false
+    runcmd:
+    {{- if .XR.spec.guest.postInstallCommands }}
+    {{- range .XR.spec.guest.postInstallCommands }}
+    - {{ . }}
+    {{- end }}
+    {{- end }}
+    cloud_final_modules:
+    - [scripts-user, always]
+  meta-data.yaml: |
+    local-hostname: {{ .XR.metadata.name }}
+    instance-id: {{ .XR.metadata.name }}-{{ .XR.metadata.namespace }}</code></pre>
+
+<p>The Composition then creates a <strong>Secret</strong> or <strong>ConfigMap</strong> with this user-data and references it in the VirtualMachine's cloud-init disk:</p>
+
+<pre><code>spec:
+  template:
+    spec:
+      domain:
+        devices:
+          disks:
+          - name: cloudinitdisk
+            disk:
+              bus: virtio
+          - name: rootdisk
+            disk:
+              bus: virtio
+      volumes:
+      - name: cloudinitdisk
+        cloudInitNoCloud:
+          secretRef: cloud-init-user-data-{{ .XR.metadata.name }}
+      - name: rootdisk
+        dataVolume:
+          name: dv-{{ .XR.metadata.name }}</code></pre>
+
+<div class="callout">
+  <div class="callout-label">XRD schema extension</div>
+  To support this, extend your XRD's spec to include guest configuration:
+  <pre><code>properties:
+  guest:
+    type: object
+    properties:
+      adminUser:
+        type: string
+        description: Username for the admin account
+      sshKeys:
+        type: array
+        items:
+          type: string
+        description: SSH public keys for the admin user
+      postInstallCommands:
+        type: array
+        items:
+          type: string
+        description: Commands to run after initial setup</code></pre>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>5. Windows VM Support</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Windows VMs require additional configuration beyond Linux:</p>
+
+<h3>VirtIO Drivers</h3>
+
+<p>Windows needs <strong>VirtIO drivers</strong> for network, disk, and paravirtualized devices. These must be available at boot time:</p>
+
+<pre><code>spec:
+  template:
+    spec:
+      domain:
+        devices:
+          disks:
+          - name: rootdisk
+            disk:
+              bus: virtio
+          - name: virtio-drivers
+            cdrom:
+              bus: sata
+            readonly: true
+          - name: cloudinitdisk
+            disk:
+              bus: sata
+        interfaces:
+        - masquerade: {}
+          name: default
+        volumes:
+        - name: virtio-drivers
+          dataVolume:
+            name: dv-virtio-drivers
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            secretRef: cloud-init-user-data-{{ .XR.metadata.name }}
+        - name: rootdisk
+          dataVolume:
+            name: dv-{{ .XR.metadata.name }}</code></pre>
+
+<h3>Windows cloud-init Alternative: Sysprep</h3>
+
+<p>Windows doesn't use cloud-init. Instead, use <strong>sysprep</strong> for first-boot configuration:</p>
+
+<pre><code>spec:
+  template:
+    spec:
+      domain:
+        devices:
+          disks:
+          - name: windows-sysprep
+            cdrom:
+              bus: sata
+            readonly: true
+        volumes:
+        - name: windows-sysprep
+          cloudInitConfigDrive:
+            secretRef: sysprep-config</code></pre>
+
+<p>The sysprep ConfigDrive contains an <code>autounattend.xml</code> file that configures the Windows VM on first boot.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>6. Image Management at Scale</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>As your team provisions more VMs, managing base images becomes important:</p>
+
+<h3>Base Image Registry</h3>
+
+<p>Store base images in a registry accessible from the OpenShift cluster:</p>
+
+<pre><code># Option 1: OpenShift Image Registry (for containerized images)
+# Convert qcow2 to a container and push to the internal registry
+oc image export registry.internal.example.com/base-images/centos-stream-9:latest /tmp/centos.qcow2
+
+# Option 2: HTTP-accessible image store
+# Host images on an internal HTTP server
+image: "https://images.internal.example.com/centos-stream-9.qcow2"
+
+# Option 3: PVC-based image store
+# Pre-provision PVCs with images and reference them directly
+storageClass:
+  existingPvc: base-images/centos-stream-9</code></pre>
+
+<h3>Image Templates</h3>
+
+<p>Define image templates in your XRD to standardize which images teams can use:</p>
+
+<pre><code>spec:
+  parameters:
+    image:
+      type: object
+      properties:
+        name:
+          type: string
+          enum:
+          - centos-stream-9
+          - rhel-9
+          - ubuntu-22.04
+        version:
+          type: string
+          enum:
+          - latest
+          - "20260601"  # date-based versioning</code></pre>
+
+<p>This prevents teams from referencing arbitrary URLs and ensures only approved, security-scanned images are used.</p>
+
+<h3>Image Update Workflow</h3>
+
+<pre><code># 1. Build new base image (via Packer, OSBuild, etc.)
+# 2. Scan for vulnerabilities (Trivy, Grype, etc.)
+# 3. Push to image registry
+# 4. Update the image template in Git
+# 5. ArgoCD syncs the new template
+# 6. New VMs use the new image
+# 7. Existing VMs are NOT affected (they have their own disk)
+# 8. To update existing VMs: snapshot → delete → recreate with new image</code></pre>
+
+<div class="callout orange">
+  <div class="callout-label">Image update caveat</div>
+  Existing VMs have their own persistent disk. Changing the base image in the Composition does NOT update running VMs. To update an existing VM:
+  <ol>
+    <li>Take a snapshot of the VM's disk</li>
+    <li>Delete the VM (and its Claim)</li>
+    <li>Update the Claim with the new image reference</li>
+    <li>Create a new Claim — Crossplane provisions a new VM with the new image</li>
+  </ol>
+  This is a fundamental difference from container workloads where images are pulled fresh on every deployment.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>7. Try This: Design the Guest Config Schema</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="callout orange">
+  <div class="callout-label">Exercise</div>
+  Your team wants to support both Linux and Windows VMs. Design the <code>guest</code> section of your XRD spec that supports:
+  <ol>
+    <li>Linux: SSH keys, admin user, cloud-init user-data, post-install commands</li>
+    <li>Windows: admin password (hashed), sysprep configuration, VirtIO driver reference</li>
+    <li>A shared field for both: hostname, tags for organization</li>
+  </ol>
+  How would you structure the schema? How would the Composition handle the different cloud-init vs. sysprep paths?
+</div>
+
+<button class="answer-toggle" onclick="toggleAnswer('answers-006')">Show Answers ▾</button>
+<div id="answers-006" class="answer-panel" style="display:none;">
+
+<h2>Exercise 006: Guest Config Schema Design — Answer Key</h2>
+
+<h3>XRD Schema</h3>
+
+<pre><code>spec:
+  parameters:
+    guest:
+      type: object
+      properties:
+        # Shared fields
+        hostname:
+          type: string
+          description: Hostname for the VM
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          description: Key-value tags for organization
+
+        # Linux-specific
+        linux:
+          type: object
+          properties:
+            adminUser:
+              type: string
+              default: cloud-user
+            sshKeys:
+              type: array
+              items:
+                type: string
+              description: SSH public keys
+            postInstallCommands:
+              type: array
+              items:
+                type: string
+              description: Commands to run after initial setup
+            disablePasswordAuth:
+              type: boolean
+              default: true
+              description: Disable password-based SSH login
+
+        # Windows-specific
+        windows:
+          type: object
+          properties:
+            adminPasswordSecretRef:
+              type: object
+              properties:
+                name:
+                  type: string
+                key:
+                  type: string
+              description: Reference to a Secret containing the admin password
+            domainJoin:
+              type: object
+              properties:
+                domainName:
+                  type: string
+                username:
+                  type: string
+                passwordSecretRef:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    key:
+                      type: string
+              description: Active Directory domain join configuration</code></pre>
+
+<h3>Composition Handling</h3>
+
+<p>The Composition uses Go-Templating to branch based on whether <code>linux</code> or <code>windows</code> is specified:</p>
+
+<pre><code># Go-Templating template for cloud-init vs sysprep
+{{- if .XR.spec.guest.linux }}
+# Linux: cloud-init NoCloud
+spec:
+  template:
+    spec:
+      volumes:
+      - name: cloudinitdisk
+        cloudInitNoCloud:
+          secretRef: cloud-init-user-data-{{ .XR.metadata.name }}
+{{- else if .XR.spec.guest.windows }}
+# Windows: cloud-init ConfigDrive for sysprep
+spec:
+  template:
+    spec:
+      volumes:
+      - name: sysprep
+        cloudInitConfigDrive:
+          secretRef: sysprep-config-{{ .XR.metadata.name }}
+      - name: virtio-drivers
+        dataVolume:
+          name: dv-virtio-drivers
+{{- end }}</code></pre>
+
+<p>The Composition also conditionally includes the VirtIO driver CD-ROM only for Windows VMs, and sets different disk buses (virtio for Linux, SATA for Windows cloud-init disk).</p>
+
+<h3>Secret Management</h3>
+
+<p>Passwords and sensitive data should be stored in Kubernetes Secrets, not in the Claim YAML. The Composition creates the cloud-init secret from the XR's parameters:</p>
+
+<pre><code># Composition creates a Secret with cloud-init user-data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloud-init-user-data-{{ .XR.metadata.name }}
+type: Opaque
+stringData:
+  user-data: |
+    #cloud-config
+    hostname: {{ .XR.spec.guest.hostname | default .XR.metadata.name }}
+    users:
+    - name: {{ .XR.spec.guest.linux.adminUser | default "cloud-user" }}
+      ssh-authorized-keys:
+      {{- range .XR.spec.guest.linux.sshKeys }}
+      - {{ . }}
+      {{- end }}
+  meta-data: |
+    local-hostname: {{ .XR.spec.guest.hostname | default .XR.metadata.name }}</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Security note</div>
+  For production, consider using an external secrets manager (HashiCorp Vault, AWS Secrets Manager, OpenShift External Secrets Operator) instead of storing passwords in Kubernetes Secrets. The Composition would reference the external secret and inject the value at runtime.
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>8. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>This explainer covered the application-level VM workload stack — images, cloud-init, guest agents, and Windows support. The remaining topics for your task plan are:</p>
+<ul>
+  <li><strong>Security and compliance</strong> — image scanning, RBAC for workload namespaces, network policies</li>
+  <li><strong>Monitoring and observability</strong> — VM metrics, alerting, logging</li>
+  <li><strong>Disaster recovery</strong> — VM backup/restore, snapshot policies</li>
+</ul>
+
+<p>These would be additional explainers if you want to deep-dive into them, or you can start building your task plan with what we've covered so far.</p>
+
+</body>
+</html>

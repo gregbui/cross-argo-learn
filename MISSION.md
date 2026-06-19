@@ -11,6 +11,7 @@ We are building an on-prem infrastructure provisioning stack that delivers virtu
 - Ability to author an XRD and its matching Composition for a VM workload
 - Understanding of where ArgoCD fits (GitOps sync of Crossplane manifests, not VM workloads themselves)
 - Awareness of operational concerns: upgrades, secrets management, RBAC, networking, storage classes
+- Understanding of OS image preparation, cloud-init, QEMU guest agent, and how they integrate with Crossplane Compositions
 
 ## Constraints
 
@@ -22,6 +23,5 @@ We are building an on-prem infrastructure provisioning stack that delivers virtu
 ## Out of scope
 
 - OpenShift cluster installation/management (assumed available)
-- Application-level VM workload development (OS images, guest tools)
 - Networking deep-dives (CNI, SDN) unless they directly impact VM provisioning
 - Storage plugin internals beyond what's needed for VM disk provisioning
