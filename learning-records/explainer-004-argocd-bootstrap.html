@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArgoCD App-of-Apps Bootstrap</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+    color: var(--accent-cyan);
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+    padding: 0.75rem 1rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.green {
+    border-left-color: var(--accent-green);
+    background: rgba(63, 185, 80, 0.06);
+  }
+  .callout.orange {
+    border-left-color: var(--accent-orange);
+    background: rgba(210, 153, 34, 0.06);
+  }
+  .callout.red {
+    border-left-color: var(--accent-red);
+    background: rgba(248, 81, 73, 0.06);
+  }
+  .callout-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+  .diagram-title {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+  }
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+  }
+  .flow-box {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .flow-box.git { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); border: 1px solid rgba(188, 140, 255, 0.3); }
+  .flow-box.argocd { background: rgba(88, 166, 255, 0.15); color: var(--accent); border: 1px solid rgba(88, 166, 255, 0.3); }
+  .flow-box.crossplane { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
+  .flow-box.runtime { background: rgba(57, 210, 192, 0.15); color: var(--accent-cyan); border: 1px solid rgba(57, 210, 192, 0.3); }
+  .flow-arrow { color: var(--text-muted); font-size: 1.2rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td { background: var(--bg); }
+  ul, ol {
+    margin: 0.5rem 0 1rem 1.5rem;
+  }
+  li { margin-bottom: 0.4rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .answer-toggle {
+    display: inline-block;
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--accent-orange);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 1rem 0;
+    transition: background 0.2s;
+  }
+  .answer-toggle:hover {
+    background: rgba(210, 153, 34, 0.25);
+  }
+  .answer-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .answer-panel h2 {
+    margin-top: 1.5rem;
+    font-size: 1.2rem;
+  }
+  .answer-panel h3 {
+    font-size: 1rem;
+    color: var(--accent-orange);
+  }
+  .answer-panel pre {
+    font-size: 0.8rem;
+  }
+  .answer-table {
+    font-size: 0.85rem;
+  }
+  .answer-table th {
+    background: rgba(210, 153, 34, 0.1);
+    color: var(--accent-orange);
+  }
+  .answer-table td {
+    background: var(--bg);
+  }
+</style>
+<script>
+  function toggleAnswer(id) {
+    var panel = document.getElementById(id);
+    var btn = panel.previousElementSibling;
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      btn.textContent = 'Hide Answers ▴';
+    } else {
+      panel.style.display = 'none';
+      btn.textContent = 'Show Answers ▾';
+    }
+  }
+</script>
+</head>
+<body>
+
+<h1>ArgoCD App-of-Apps Bootstrap</h1>
+
+<p>ArgoCD is the GitOps engine that syncs infrastructure manifests from Git to your cluster. The App-of-Apps pattern creates a hierarchical bootstrap chain: one "root" Application manages child Applications, which manage the actual resources. This explainer shows the concrete YAML for bootstrapping the entire Crossplane + KubeVirt stack from Git.</p>
+
+<div class="callout">
+  <div class="callout-label">What we've covered so far</div>
+  You know XRDs, Compositions, Composition Functions, and Provider installation. Now we tie it all together with ArgoCD — the layer that makes the whole stack GitOps-driven.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>1. The App-of-Apps Pattern</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>An ArgoCD Application declares a Git repository path, a target revision, and a destination cluster/namespace. An <strong>App-of-Apps</strong> is an Application whose source points to a directory containing other Application manifests:</p>
+
+<div class="diagram">
+  <div class="diagram-title">Bootstrap Hierarchy</div>
+  <div class="flow">
+    <span class="flow-box git">Git Repo</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box argocd">Root App</span>
+    <span class="flow-arrow">manages</span>
+    <span class="flow-box argocd">Infra App</span>
+    <span class="flow-arrow">syncs</span>
+    <span class="flow-box crossplane">Crossplane</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-box runtime">VMs</span>
+  </div>
+</div>
+
+<p>The hierarchy for our stack:</p>
+
+<pre><code>Root Application (argocd namespace)
+├── Infrastructure Application (crossplane-system namespace)
+│   ├── Crossplane core
+│   ├── Provider: KubeVirt
+│   ├── CompositionFunctions: patch-and-transform, go-templating
+│   ├── XRD: XVirtualMachine
+│   ├── Composition: vm-kubevirt
+│   └── ProviderConfig: default
+└── Workloads Application (workloads namespace)
+    ├── dev/web-server/claim.yaml
+    ├── dev/db-server/claim.yaml
+    ├── staging/web-server/claim.yaml
+    └── prod/web-server/claim.yaml</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>2. Repository Structure</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Here's the recommended directory layout for the Git repository:</p>
+
+<pre><code>infrastructure-as-code/
+├── argocd/
+│   ├── root-application.yaml          # The root App-of-Apps
+│   ├── infrastructure-app.yaml        # Infrastructure bootstrap
+│   └── workloads-app.yaml             # Workload Claims
+├── crossplane/
+│   ├── provider-kubevirt.yaml         # Provider package
+│   ├── provider-config.yaml           # ProviderConfig
+│   ├── composition-functions.yaml     # CompositionFunctions
+│   └── rbac/
+│       ├── serviceaccount.yaml
+│       ├── clusterrole.yaml
+│       └── clusterrolebinding.yaml
+├── xrd/
+│   └── xvirtualmachine.yaml           # XRD definition
+├── compositions/
+│   ├── vm-kubevirt.yaml               # VM Composition
+│   └── vm-patch-config.yaml           # FunctionConfig for patches
+└── workloads/
+    ├── dev/
+    │   ├── web-server/
+    │   │   └── claim.yaml
+    │   └── db-server/
+    │       └── claim.yaml
+    ├── staging/
+    │   └── web-server/
+    │       └── claim.yaml
+    └── prod/
+        └── web-server/
+            └── claim.yaml</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Directory organization rationale</div>
+  - <code>argocd/</code>: ArgoCD Application manifests (the bootstrap layer)
+  - <code>crossplane/</code>: Crossplane infrastructure (providers, functions, RBAC)
+  - <code>xrd/</code>: XRD definitions
+  - <code>compositions/</code>: Composition manifests and FunctionConfigs
+  - <code>workloads/</code>: Per-environment VM Claims
+  This separation lets ArgoCD Applications target specific directories and keeps concerns isolated.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>3. Root Application (App-of-Apps)</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The root Application points to the <code>argocd/</code> directory, which contains the child Application manifests:</p>
+
+<pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  labels:
+    environment: all
+spec:
+  project: infrastructure
+  source:
+    repoURL: https://github.com/your-org/infrastructure-as-code.git
+    targetRevision: main
+    path: argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true</code></pre>
+
+<p>This Application doesn't sync resources directly. It syncs the child Applications defined in <code>argocd/</code>. ArgoCD detects the child Applications and creates them automatically.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>4. Infrastructure Application</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Syncs all Crossplane infrastructure manifests to the cluster. This is the foundation — nothing works until this Application is healthy.</p>
+
+<pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-infrastructure
+  namespace: argocd
+  labels:
+    environment: infrastructure
+spec:
+  project: infrastructure
+  source:
+    repoURL: https://github.com/your-org/infrastructure-as-code.git
+    targetRevision: main
+    path: crossplane
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - PruneLast=true</code></pre>
+
+<div class="callout green">
+  <div class="callout-label">Sync options explained</div>
+  <code>CreateNamespace=true</code> — auto-creates the <code>crossplane-system</code> namespace if it doesn't exist.<br>
+  <code>PruneLast=true</code> — prunes resources last, ensuring Crossplane has time to clean up managed resources before its own CRDs are removed. Critical for safe provider upgrades.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>5. Workloads Application</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Syncs VM Claims from Git. This is where the actual VM provisioning happens. For production, you typically want manual approval to prevent accidental VM creation.</p>
+
+<pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: workloads
+  namespace: argocd
+  labels:
+    environment: workloads
+spec:
+  project: infrastructure
+  source:
+    repoURL: https://github.com/your-org/infrastructure-as-code.git
+    targetRevision: main
+    path: workloads
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: workloads
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false    # No self-heal — don't auto-delete VMs
+    syncOptions:
+    - CreateNamespace=true
+    - PruneLast=true</code></pre>
+
+<div class="callout orange">
+  <div class="callout-label">Why no selfHeal for workloads?</div>
+  Crossplane's reconciliation loop will try to recreate any VM that gets deleted. If ArgoCD also tries to self-heal, you get a conflict loop. For workloads, let Crossplane manage the lifecycle — ArgoCD's job is just to sync the Claim YAML from Git. Self-heal is safe for infrastructure (providers, XRDs) but risky for workloads (VMs, databases).
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>6. Sync Waves: Ordering the Bootstrap</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Sync waves control the order in which ArgoCD syncs resources. For our stack, the order matters:</p>
+
+<ol>
+  <li><strong>Wave 0:</strong> RBAC (ServiceAccount, ClusterRole, ClusterRoleBinding)</li>
+  <li><strong>Wave 1:</strong> Crossplane core (if not pre-installed)</li>
+  <li><strong>Wave 2:</strong> Providers and CompositionFunctions</li>
+  <li><strong>Wave 3:</strong> ProviderConfig</li>
+  <li><strong>Wave 4:</strong> XRDs</li>
+  <li><strong>Wave 5:</strong> Compositions</li>
+  <li><strong>Wave 6:</strong> Workload Claims</li>
+</ol>
+
+<p>Implement sync waves using the <code>argocd.argoproj.io/sync-wave</code> annotation:</p>
+
+<pre><code># RBAC - Wave 0
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: crossplane-kubevirt-provider
+  namespace: crossplane-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+
+---
+# Provider - Wave 2
+apiVersion: pkg.crossplane.io/v1beta1
+kind: Provider
+metadata:
+  name: crossplane-community-provider-kubevirt
+  namespace: crossplane-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  package: crossplane/community-provider-kubevirt:v0.18.0
+
+---
+# XRD - Wave 4
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xvirtualmachines.infra.example.com
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+
+---
+# Composition - Wave 5
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: vm-kubevirt
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+
+---
+# Workload Claim - Wave 6
+apiVersion: infra.example.com/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: web-server
+  namespace: workloads
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Sync wave strategy</div>
+  ArgoCD syncs resources in ascending wave order. Resources in the same wave are synced in parallel. Use wave <code>-1</code> for cleanup (prune) operations and wave <code>999</code> for final verification steps. Negative waves run before positive ones.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>7. The Complete Bootstrap Flow</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Here's the complete sequence from a Git commit to a running VM:</p>
+
+<div class="diagram">
+  <div class="diagram-title">End-to-End Bootstrap</div>
+  <div style="display: flex; flex-direction: column; gap: 0.5rem; align-items: center;">
+    <div class="flow">
+      <span class="flow-box git">Developer commits claim.yaml to Git</span>
+    </div>
+    <div class="flow">
+      <span class="flow-arrow">↓</span>
+    </div>
+    <div class="flow">
+      <span class="flow-box argocd">ArgoCD detects change (polls or webhook)</span>
+    </div>
+    <div class="flow">
+      <span class="flow-arrow">↓</span>
+    </div>
+    <div class="flow">
+      <span class="flow-box argocd">ArgoCD syncs claim.yaml to cluster</span>
+    </div>
+    <div class="flow">
+      <span class="flow-arrow">↓</span>
+    </div>
+    <div class="flow">
+      <span class="flow-box crossplane">Crossplane claim controller creates XVirtualMachine XR</span>
+    </div>
+    <div class="flow">
+      <span class="flow-arrow">↓</span>
+    </div>
+    <div class="flow">
+      <span class="flow-box crossplane">XR controller invokes Composition pipeline</span>
+    </div>
+    <div class="flow">
+      <span class="flow-arrow">↓</span>
+    </div>
+    <div class="flow">
+      <span class="flow-box crossplane">Composition renders VirtualMachine + DataVolume managed resources</span>
+    </div>
+    <div class="flow">
+      <span class="flow-arrow">↓</span>
+    </div>
+    <div class="flow">
+      <span class="flow-box runtime">KubeVirt provider creates VM and DV CRs in cluster</span>
+    </div>
+    <div class="flow">
+      <span class="flow-arrow">↓</span>
+    </div>
+    <div class="flow">
+      <span class="flow-box runtime">KubeVirt controller provisions VM on OpenShift</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>8. Drift Detection and Self-Healing</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>ArgoCD continuously monitors cluster state against Git. For the Crossplane stack, drift behavior differs by layer:</p>
+
+<table>
+  <thead>
+    <tr><th>Layer</th><th>Drift Source</th><th>Self-Heal Behavior</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Infrastructure (Providers, XRDs, Compositions)</td>
+      <td>Manual changes, ArgoCD sync</td>
+      <td>Self-heal: ArgoCD restores Git state</td>
+    </tr>
+    <tr>
+      <td>Crossplane managed resources</td>
+      <td>Crossplane reconciliation</td>
+      <td>Let Crossplane manage — don't fight its reconciliation</td>
+    </tr>
+    <tr>
+      <td>Workload Claims</td>
+      <td>Developer Git commit</td>
+      <td>Self-heal: ArgoCD restores Git state</td>
+    </tr>
+    <tr>
+      <td>VirtualMachine CRs (created by Composition)</td>
+      <td>Crossplane + KubeVirt</td>
+      <td>Don't sync — these are managed by Crossplane, not ArgoCD</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout red">
+  <div class="callout-label">Critical: Don't sync Crossplane-managed resources</div>
+  ArgoCD should <strong>never</strong> sync VirtualMachine, DataVolume, or VirtualMachineInstance CRs. These are created by Crossplane's Composition pipeline. If ArgoCD tries to manage them, you'll get sync conflicts between ArgoCD's declarative sync and Crossplane's reconciliation. Only sync Claims, XRDs, Compositions, and Provider manifests — the inputs to Crossplane, not its outputs.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>9. Try This: Design the Sync Policy</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="callout orange">
+  <div class="callout-label">Exercise</div>
+  Your team wants to add a <code>security</code> namespace with its own set of VM Claims. The security team requires:
+  <ol>
+    <li>Manual approval for all syncs to the security namespace</li>
+    <li>No self-heal (human must approve every change)</li>
+    <li>Sync only when the security team's branch is merged to main</li>
+  </ol>
+  How would you configure the ArgoCD Application for this namespace? What changes to the repository structure would you make?
+</div>
+
+<button class="answer-toggle" onclick="toggleAnswer('answers-004')">Show Answers ▾</button>
+<div id="answers-004" class="answer-panel" style="display:none;">
+
+<h2>Exercise 004: ArgoCD Sync Policy for Security Namespace — Answer Key</h2>
+
+<h3>Repository Structure Change</h3>
+
+<p>Add a <code>security/</code> directory alongside <code>dev/</code>, <code>staging/</code>, and <code>prod/</code>:</p>
+
+<pre><code>workloads/
+├── dev/
+├── staging/
+├── prod/
+└── security/          # New: separate branch, manual approval
+    └── firewall/
+        └── claim.yaml</code></pre>
+
+<h3>ArgoCD Application Configuration</h3>
+
+<pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: workloads-security
+  namespace: argocd
+  labels:
+    environment: security
+    approval-required: "true"
+spec:
+  project: infrastructure
+  source:
+    repoURL: https://github.com/your-org/infrastructure-as-code.git
+    targetRevision: refs/heads/security-team
+    path: workloads/security
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: security
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+    - CreateNamespace=true
+    - PruneLast=true
+    # Manual approval required
+    syncOptions:
+    - PrunePropagationPolicy=foreground</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Key configuration points</div>
+  <ul>
+    <li><code>targetRevision: refs/heads/security-team</code> — points to a dedicated branch, not main. Changes only sync when this branch is merged.</li>
+    <li><code>selfHeal: false</code> — ArgoCD won't auto-correct drift. A human must review and sync.</li>
+    <li><code>path: workloads/security</code> — isolated directory for security workloads.</li>
+  </ul>
+  <p>In the ArgoCD UI, the Application will show as <code>OutOfSync</code> until a human clicks <code>Sync</code> and approves. You can also use ArgoCD's <code>approval</code> workflow with Webhooks for CI/CD integration.</p>
+</div>
+
+<h3>Alternative: Using ArgoCD Approvals</h3>
+
+<p>For even stricter control, use ArgoCD's sync-wave approvals:</p>
+
+<pre><code># In the claim.yaml
+apiVersion: infra.example.com/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: firewall
+  namespace: security
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+    argocd.argoproj.io/require-sync-approval: "true"</code></pre>
+
+<p>This requires explicit approval in the ArgoCD UI before the resource is synced, adding a human-in-the-loop gate on top of the branch protection.</p>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>10. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>We've covered all the individual pieces. The final explainer will tie everything together:</p>
+<ul>
+  <li><strong>End-to-end walkthrough</strong> — from Git commit to running VM, covering every component interaction</li>
+  <li><strong>Operational runbooks</strong> — upgrades, debugging reconciliation issues, rollback procedures</li>
+  <li><strong>Task plan synthesis</strong> — converting everything we've learned into an actionable implementation plan</li>
+</ul>
+
+</body>
+</html>

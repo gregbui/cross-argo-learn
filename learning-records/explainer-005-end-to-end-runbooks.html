@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>End-to-End Walkthrough, Runbooks & Task Plan</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+    color: var(--accent-cyan);
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+    padding: 0.75rem 1rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.green {
+    border-left-color: var(--accent-green);
+    background: rgba(63, 185, 80, 0.06);
+  }
+  .callout.orange {
+    border-left-color: var(--accent-orange);
+    background: rgba(210, 153, 34, 0.06);
+  }
+  .callout.red {
+    border-left-color: var(--accent-red);
+    background: rgba(248, 81, 73, 0.06);
+  }
+  .callout-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+  .diagram-title {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+  }
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+  }
+  .flow-box {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .flow-box.git { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); border: 1px solid rgba(188, 140, 255, 0.3); }
+  .flow-box.argocd { background: rgba(88, 166, 255, 0.15); color: var(--accent); border: 1px solid rgba(88, 166, 255, 0.3); }
+  .flow-box.crossplane { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
+  .flow-box.runtime { background: rgba(57, 210, 192, 0.15); color: var(--accent-cyan); border: 1px solid rgba(57, 210, 192, 0.3); }
+  .flow-arrow { color: var(--text-muted); font-size: 1.2rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td { background: var(--bg); }
+  ul, ol {
+    margin: 0.5rem 0 1rem 1.5rem;
+  }
+  li { margin-bottom: 0.4rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .answer-toggle {
+    display: inline-block;
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--accent-orange);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 1rem 0;
+    transition: background 0.2s;
+  }
+  .answer-toggle:hover {
+    background: rgba(210, 153, 34, 0.25);
+  }
+  .answer-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .answer-panel h2 {
+    margin-top: 1.5rem;
+    font-size: 1.2rem;
+  }
+  .answer-panel h3 {
+    font-size: 1rem;
+    color: var(--accent-orange);
+  }
+  .answer-panel pre {
+    font-size: 0.8rem;
+  }
+  .answer-table {
+    font-size: 0.85rem;
+  }
+  .answer-table th {
+    background: rgba(210, 153, 34, 0.1);
+    color: var(--accent-orange);
+  }
+  .answer-table td {
+    background: var(--bg);
+  }
+</style>
+<script>
+  function toggleAnswer(id) {
+    var panel = document.getElementById(id);
+    var btn = panel.previousElementSibling;
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      btn.textContent = 'Hide Answers ▴';
+    } else {
+      panel.style.display = 'none';
+      btn.textContent = 'Show Answers ▾';
+    }
+  }
+</script>
+</head>
+<body>
+
+<h1>End-to-End Walkthrough, Runbooks &amp; Task Plan</h1>
+
+<p>This is the capstone explainer. We'll walk through a complete end-to-end scenario, document operational runbooks for day-2 operations, and synthesize everything into an actionable task plan you can use to build and operate the stack.</p>
+
+<div class="callout">
+  <div class="callout-label">What we know</div>
+  You understand XRDs, Compositions, Composition Functions, Providers, RBAC, ProviderConfigs, and ArgoCD App-of-Apps. This explainer ties it all together into a production-ready operational model.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>Part 1: End-to-End Walkthrough</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<h3>Scenario: A developer provisions a web server VM</h3>
+
+<p>A developer in the <code>dev</code> team wants to spin up a CentOS 9 VM with 4 vCPUs, 8Gi memory, and a 50Gi disk. Here's the complete chain of events:</p>
+
+<h3>Step 1: Developer commits a Claim to Git</h3>
+
+<pre><code># workloads/dev/web-server/claim.yaml
+apiVersion: infra.example.com/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: web-server
+  namespace: dev
+spec:
+  compositionSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+  parameters:
+    compute:
+      vcpus: 4
+      memory: "8Gi"
+      liveMigrate: true
+    storage:
+      size: "50Gi"
+      storageClass: ocs.external.ceph.rook.io
+      image: "https://download.centos.org/9/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2"
+    network:
+      macAddress: "52:54:00:ab:cd:ef"</code></pre>
+
+<h3>Step 2: ArgoCD detects and syncs the Claim</h3>
+
+<p>ArgoCD's polling interval (default 3 minutes) or a Git webhook detects the new commit. The <code>workloads</code> Application syncs the Claim to the <code>dev</code> namespace.</p>
+
+<pre><code># ArgoCD logs
+time="2026-06-19T10:00:00Z" level=info msg="Syncing item" application=workloads item="VirtualMachineClaim:dev/web-server"
+time="2026-06-19T10:00:01Z" level=info msg="Created" name=web-server namespace=dev</code></pre>
+
+<h3>Step 3: Crossplane claim controller creates the XR</h3>
+
+<p>Crossplane's <code>claim-controller</code> observes the new <code>VirtualMachineClaim</code> in the <code>dev</code> namespace and creates an <code>XVirtualMachine</code> XR:</p>
+
+<pre><code>apiVersion: infra.example.com/v1alpha1
+kind: XVirtualMachine
+metadata:
+  name: xvirtualmachine-web-server
+  namespace: dev
+  ownerReferences:
+  - apiVersion: infra.example.com/v1alpha1
+    kind: VirtualMachineClaim
+    name: web-server
+    controller: true
+spec:
+  compositionSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+  compute:
+    vcpus: 4
+    memory: "8Gi"
+    liveMigrate: true
+  storage:
+    size: "50Gi"
+    storageClass: ocs.external.ceph.rook.io
+    image: "https://download.centos.org/9/images/CentOS-Stream-9.qcow2"
+  network:
+    macAddress: "52:54:00:ab:cd:ef"</code></pre>
+
+<h3>Step 4: XR controller invokes the Composition</h3>
+
+<p>Crossplane's <code>xrd-controller</code> observes the new XR, matches it to the <code>vm-kubevirt</code> Composition via the selector label, and runs the Composition pipeline:</p>
+
+<ol>
+  <li><strong>render-vm-template</strong> (Go-Templating): Renders the VirtualMachine CR with the XR's parameters</li>
+  <li><strong>patch-dv-reference</strong> (Patch-and-Transform): Creates the DataVolume CR with the image URL and disk size</li>
+  <li><strong>link-dv-to-vm</strong> (Patch-and-Transform): Links the DataVolume to the VirtualMachine</li>
+</ol>
+
+<h3>Step 5: Composition renders managed resources</h3>
+
+<p>The pipeline outputs two managed resources:</p>
+
+<pre><code># VirtualMachine managed resource
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: web-server-vm
+  namespace: dev
+  labels:
+    infra.example.com/managed-by: crossplane
+    infra.example.com/xr-name: xvirtualmachine-web-server
+spec:
+  running: true
+  evictionStrategy: LiveMigrate
+  template:
+    spec:
+      domain:
+        cpu:
+          cores: 4
+        resources:
+          requests:
+            memory: 8Gi
+        devices:
+          disks:
+          - name: disk0
+            disk:
+              bus: virtio
+          interfaces:
+          - macAddress: "52:54:00:ab:cd:ef"
+            bridge: {}
+      networks:
+      - name: default-network
+        pod: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: disk0
+        dataVolume:
+          name: dv-web-server
+
+# DataVolume managed resource
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: dv-web-server
+  namespace: dev
+  labels:
+    infra.example.com/managed-by: crossplane
+spec:
+  source:
+    http:
+      url: "https://download.centos.org/9/images/CentOS-Stream-9.qcow2"
+  pvc:
+    accessModes:
+    - ReadWriteMany
+    resources:
+      requests:
+        storage: 50Gi
+    storageClassName: ocs.external.ceph.rook.io</code></pre>
+
+<h3>Step 6: KubeVirt provider creates the CRs</h3>
+
+<p>The KubeVirt provider controller observes the managed resources and creates the actual VirtualMachine and DataVolume CRs in the cluster. These are the same objects (Crossplane manages them in-place).</p>
+
+<h3>Step 7: KubeVirt provisions the VM</h3>
+
+<ol>
+  <li><strong>DataVolume downloads the image:</strong> CDI controller downloads the CentOS qcow2 image and creates a PVC</li>
+  <li><strong>KubeVirt creates the VMI:</strong> The VirtualMachine controller creates a VirtualMachineInstance (VMI) CR</li>
+  <li><strong>libvirt runs the VM:</strong> The VMI controller provisions the VM using libvirt on an OpenShift node</li>
+</ol>
+
+<h3>Step 8: Status propagates back to the Claim</h3>
+
+<p>Crossplane observes the VirtualMachine's status and writes it to the XR, which propagates back to the Claim:</p>
+
+<pre><code>apiVersion: infra.example.com/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: web-server
+  namespace: dev
+spec:
+  compositionSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+  parameters:
+    compute:
+      vcpus: 4
+      memory: "8Gi"
+status:
+  conditions:
+  - type: Ready
+    status: "True"
+    reason: CompositionReconcileSucceeded
+  - type: Synced
+    status: "True"
+    reason: CrossplaneReconcileSucceeded
+  endpoint: "10.128.0.45"</code></pre>
+
+<p>The developer can now SSH to <code>10.128.0.45</code>. The VM is running.</p>
+
+<div class="diagram">
+  <div class="diagram-title">Complete Request Flow</div>
+  <div style="display: flex; flex-direction: column; gap: 0.5rem; align-items: center;">
+    <div class="flow"><span class="flow-box git">Git commit: claim.yaml</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box argocd">ArgoCD syncs to cluster</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box crossplane">Claim → XR (claim controller)</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box crossplane">XR → Composition pipeline</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box crossplane">Compose: VM + DataVolume CRs</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box runtime">KubeVirt: DV downloads image</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box runtime">KubeVirt: VMI created</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box runtime">VM running on OpenShift node</span></div>
+    <div class="flow"><span class="flow-arrow">↓</span></div>
+    <div class="flow"><span class="flow-box crossplane">Status → XR → Claim (IP: 10.128.0.45)</span></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>Part 2: Operational Runbooks</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<h3>Runbook 1: Debugging a Stuck VM Provisioning</h3>
+
+<p>Symptom: The Claim shows <code>Ready: False</code> and the XR is stuck in <code>Creating</code> state.</p>
+
+<pre><code># 1. Check the Claim status
+oc get virtualmachineclaim web-server -n dev -o yaml
+
+# 2. Check the XR status
+oc get xvirtualmachine xvirtualmachine-web-server -n dev -o yaml
+
+# 3. Check Composition reconciliation events
+oc get events -n dev --field-selector involvedObject.kind=XVirtualMachine
+
+# 4. Check if managed resources were created
+oc get virtualmachine -n dev
+oc get datavolume -n dev
+
+# 5. If DV is stuck downloading, check CDI logs
+oc logs -l cdi.kubevirt.io/datavolume=dv-web-server -n openshift-cdi
+
+# 6. Check if the VM is actually running
+oc get vmi -n dev
+
+# 7. Check KubeVirt controller logs
+oc logs -l kubevirt.io=virt-controller -n openshift-virtualization -c virt-controller</code></pre>
+
+<div class="callout orange">
+  <div class="callout-label">Common causes</div>
+  <ul>
+    <li><strong>DV stuck in Pending:</strong> Image URL unreachable from cluster nodes, or storage class not available</li>
+    <li><strong>VM stuck in Stopped:</strong> KubeVirt controller can't schedule the VMI (node resources exhausted)</li>
+    <li><strong>XR stuck in Creating:</strong> Composition has a patch error; check CompositionFunction logs</li>
+    <li><strong>Claim not syncing:</strong> ArgoCD is blocked on manual approval or has a sync conflict</li>
+  </ul>
+</div>
+
+<h3>Runbook 2: Upgrading the KubeVirt Provider</h3>
+
+<pre><code># 1. Update the provider version in Git
+# Edit: crossplane/provider-kubevirt.yaml
+# Change: package: crossplane/community-provider-kubevirt:v0.18.0
+# To:     package: crossplane/community-provider-kubevirt:v0.19.0
+
+# 2. Commit and push
+git add crossplane/provider-kubevirt.yaml
+git commit -m "chore: upgrade provider-kubevirt to v0.19.0"
+git push
+
+# 3. ArgoCD detects the change and syncs
+# Wait for the Application to show Synced
+
+# 4. Verify the new provider is running
+oc get providers -n crossplane-system
+
+# 5. Verify existing VMs are unaffected
+oc get virtualmachine -n dev
+oc get vmi -n dev
+
+# 6. Check for reconciliation errors
+oc get events -n crossplane-system --sort-by='.lastTimestamp' | tail -20</code></pre>
+
+<div class="callout green">
+  <div class="callout-label">Safe upgrade practices</div>
+  <ul>
+    <li>Always test provider upgrades in <code>dev</code> before <code>prod</code></li>
+    <li>Existing VMs are not affected by provider upgrades — the CRDs are backward-compatible within minor versions</li>
+    <li>Roll back by reverting the Git commit; ArgoCD will sync the previous version</li>
+    <li>For major version upgrades, read the migration notes in the provider's release changelog</li>
+  </ul>
+</div>
+
+<h3>Runbook 3: Rolling Back a Bad Claim</h3>
+
+<p>Scenario: A developer committed a Claim with wrong parameters (e.g., 1000Gi disk instead of 50Gi). The VM is already provisioning.</p>
+
+<pre><code># Option A: Delete the Claim (removes the VM)
+oc delete virtualmachineclaim web-server -n dev
+# ArgoCD will detect the deletion and re-sync from Git
+# Since the Claim file still exists in Git, ArgoCD will recreate it
+# So you must also fix the Git file first!
+
+# Option B: Patch the Claim in Git, then let ArgoCD sync
+# 1. Edit workloads/dev/web-server/claim.yaml with correct values
+# 2. Commit and push
+# 3. ArgoCD syncs the corrected Claim
+# 4. Crossplane reconciles the XR with new parameters
+# Note: Some parameters (disk size) can't be changed on an existing VM
+# You may need to delete and recreate the VM for certain changes
+
+# Option C: Delete the XR directly (bypasses ArgoCD)
+oc delete xvirtualmachine xvirtualmachine-web-server -n dev
+# This removes the VM but leaves the Claim in Git
+# Next ArgoCD sync will recreate the Claim and XR</code></pre>
+
+<div class="callout red">
+  <div class="callout-label">Warning: Parameter immutability</div>
+  Some VM parameters (disk size, image) cannot be changed after the VM is created. Changing these in the Claim will cause Crossplane to report a reconciliation error. The safe pattern is: delete the Claim → fix the Git file → ArgoCD recreates the Claim → new VM is provisioned. Existing data is lost.
+</div>
+
+<h3>Runbook 4: Scaling VMs Across Environments</h3>
+
+<pre><code># To create a staging copy of the dev web server:
+# 1. Copy the claim file
+cp workloads/dev/web-server/claim.yaml workloads/staging/web-server/claim.yaml
+
+# 2. Update the namespace in the claim
+# (The claim's namespace should match the target environment)
+# Edit: workloads/staging/web-server/claim.yaml
+# Change: namespace: dev → namespace: staging
+
+# 3. Commit and push
+git add workloads/staging/web-server/claim.yaml
+git commit -m "feat: add staging web-server VM"
+git push
+
+# 4. ArgoCD syncs the new Claim to the staging namespace
+# 5. Crossplane provisions the VM in the staging environment</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>Part 3: Actionable Task Plan</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Here's the complete task plan for building and operating the stack, organized by phase:</p>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Phase</th><th>Task</th><th>Details</th><th>Dependencies</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1</strong></td>
+      <td rowspan="4"><strong>Prerequisites</strong></td>
+      <td>Verify OpenShift cluster</td>
+      <td>OpenShift 4.12+, with virt-operator installed, sufficient CPU/memory for VMs</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td><strong>2</strong></td>
+      <td>Verify storage classes</td>
+      <td>Confirm StorageClass availability (e.g., ocs.external.ceph.rook.io for RBD)</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td><strong>3</strong></td>
+      <td>Set up Git repository</td>
+      <td>Create repo with directory structure: argocd/, crossplane/, xrd/, compositions/, workloads/</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td><strong>4</strong></td>
+      <td>Install ArgoCD</td>
+      <td>Install ArgoCD on OpenShift (Operator or manifest-based)</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td><strong>5</strong></td>
+      <td rowspan="3"><strong>Infrastructure</strong></td>
+      <td>Create RBAC</td>
+      <td>ServiceAccount, ClusterRole, ClusterRoleBinding for KubeVirt provider</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td><strong>6</strong></td>
+      <td>Install Crossplane</td>
+      <td>Install Crossplane core (Operator or xpkg) into crossplane-system namespace</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td><strong>7</strong></td>
+      <td>Install KubeVirt provider</td>
+      <td>crossplane xpkg install-provider crossplane/community-provider-kubevirt:v0.18.0</td>
+      <td>5, 6</td>
+    </tr>
+    <tr>
+      <td><strong>8</strong></td>
+      <td rowspan="2"><strong>Composition Functions</strong></td>
+      <td>Install Patch-and-Transform</td>
+      <td>crossplane xpkg install-function crossplane/function-patch-and-transform:v0.14.0</td>
+      <td>6</td>
+    </tr>
+    <tr>
+      <td><strong>9</strong></td>
+      <td>Install Go-Templating</td>
+      <td>crossplane xpkg install-function crossplane/function-go-templating:v0.40.0</td>
+      <td>6</td>
+    </tr>
+    <tr>
+      <td><strong>10</strong></td>
+      <td rowspan="2"><strong>XRD &amp; Composition</strong></td>
+      <td>Define XRD</td>
+      <td>Create xvirtualmachines.infra.example.com XRD with compute, storage, network schema</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td><strong>11</strong></td>
+      <td>Write Composition</td>
+      <td>Create vm-kubevirt Composition with Go-Templating + Patch-and-Transform pipeline</td>
+      <td>7, 8, 9, 10</td>
+    </tr>
+    <tr>
+      <td><strong>12</strong></td>
+      <td rowspan="2"><strong>GitOps Bootstrap</strong></td>
+      <td>Create ArgoCD Applications</td>
+      <td>Root, Infrastructure, and Workloads Applications with sync waves</td>
+      <td>3, 6, 7, 10, 11</td>
+    </tr>
+    <tr>
+      <td><strong>13</strong></td>
+      <td>Bootstrap from Git</td>
+      <td>Commit root-application.yaml, verify ArgoCD syncs all layers</td>
+      <td>12</td>
+    </tr>
+    <tr>
+      <td><strong>14</strong></td>
+      <td rowspan="2"><strong>Validation</strong></td>
+      <td>Provision test VM</td>
+      <td>Commit a test Claim, verify VM provisions and status propagates</td>
+      <td>13</td>
+    </tr>
+    <tr>
+      <td><strong>15</strong></td>
+      <td>Debug and iterate</td>
+      <td>Fix any reconciliation issues, refine Composition patches</td>
+      <td>14</td>
+    </tr>
+    <tr>
+      <td><strong>16</strong></td>
+      <td rowspan="3"><strong>Operations</strong></td>
+      <td>Write runbooks</td>
+      <td>Document debugging, upgrades, rollback, scaling procedures</td>
+      <td>15</td>
+    </tr>
+    <tr>
+      <td><strong>17</strong></td>
+      <td>Set up monitoring</td>
+      <td>Prometheus metrics for Crossplane reconciliation, ArgoCD sync status, VM health</td>
+      <td>15</td>
+    </tr>
+    <tr>
+      <td><strong>18</strong></td>
+      <td>Onboard teams</td>
+      <td>Train teams on Claim authoring, Git workflow, and debugging</td>
+      <td>16, 17</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>Part 4: Knowledge Summary</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Here's a quick reference of the key concepts we've covered across all five explainers:</p>
+
+<table>
+  <thead>
+    <tr><th>Concept</th><th>Explainer</th><th>Key Takeaway</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>XRD Pipeline</td>
+      <td>Explainer 1</td>
+      <td>Claim → XR → Composition → Managed Resources → Infrastructure API</td>
+    </tr>
+    <tr>
+      <td>Composition Functions</td>
+      <td>Explainer 2</td>
+      <td>Patch-and-Transform for field mapping, Go-Templating for loops/conditionals</td>
+    </tr>
+    <tr>
+      <td>Provider Installation</td>
+      <td>Explainer 3</td>
+      <td>Provider = CRDs + controller. RBAC is the key, not credentials.</td>
+    </tr>
+    <tr>
+      <td>ArgoCD Bootstrap</td>
+      <td>Explainer 4</td>
+      <td>App-of-Apps hierarchy. Never sync Crossplane's managed resources.</td>
+    </tr>
+    <tr>
+      <td>Operations</td>
+      <td>Explainer 5</td>
+      <td>Debugging, upgrades, rollback, and the 18-step task plan.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>Part 5: Try This: Build Your Task Plan</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="callout orange">
+  <div class="callout-label">Final Exercise</div>
+  Using the task plan above as a template, adapt it to your specific environment:
+  <ol>
+    <li>What OpenShift version are you running? Does it support the KubeVirt provider version you need?</li>
+    <li>What storage classes are available? Which one will you use for VM disks?</li>
+    <li>How many namespaces/teams will use the stack? How does this affect your RBAC design?</li>
+    <li>What's your Git workflow? Who approves changes to the XRD and Composition?</li>
+  </ol>
+  Think through each question. These are the decisions that will shape your actual implementation.
+</div>
+
+<button class="answer-toggle" onclick="toggleAnswer('answers-005')">Show Answers ▾</button>
+<div id="answers-005" class="answer-panel" style="display:none;">
+
+<h2>Exercise 005: Adapt the Task Plan — Answer Key</h2>
+
+<h3>Q1: OpenShift version compatibility</h3>
+
+<p>Check your OpenShift version against the KubeVirt provider compatibility matrix:</p>
+
+<pre><code># Check OpenShift version
+oc version
+
+# Check KubeVirt operator version
+oc get csv -n openshift-virtualization -l operators.coreos.com/kubevirt.openshift-virtualization-operator.openshift-io/</code></pre>
+
+<p>Generally, OpenShift 4.12+ supports KubeVirt 1.1+. The Crossplane KubeVirt provider v0.18+ works with KubeVirt 1.1+. If you're on an older OpenShift, you may need to upgrade first or use an older provider version.</p>
+
+<h3>Q2: Storage classes</h3>
+
+<p>List available storage classes:</p>
+
+<pre><code>oc get storageclass</code></pre>
+
+<p>Common options on OpenShift:</p>
+<ul>
+  <li><code>ocs.external.ceph.rbd</code> — Ceph RBD (recommended for VMs)</li>
+  <li><code>ocs.external.cephfs</code> — CephFS (less common for VMs)</li>
+  <li><code>local-storage</code> — Local PV (fast but no migration)</li>
+  <li><code>nfs</code> — NFS (slow for VMs, but works)</li>
+</ul>
+
+<p>For VMs, Ceph RBD is the standard choice. Ensure the CDI (Containerized Data Importer) operator is installed and configured to use your storage class.</p>
+
+<h3>Q3: Multi-namespace RBAC</h3>
+
+<p>For multiple teams, the RBAC decision depends on trust level:</p>
+
+<table>
+  <thead>
+    <tr><th>Setup</th><th>RBAC Strategy</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Single team, single namespace</td>
+      <td>Namespace-scoped Role + RoleBinding</td>
+    </tr>
+    <tr>
+      <td>Multiple teams, shared cluster</td>
+      <td>ClusterRole + ClusterRoleBinding (simplest)</td>
+    </tr>
+    <tr>
+      <td>Multiple teams, strict isolation</td>
+      <td>Per-namespace Role + RoleBinding + ProviderConfig per namespace</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Q4: Git workflow</h3>
+
+<p>Recommended workflow for XRD and Composition changes:</p>
+
+<ol>
+  <li><strong>Feature branch:</strong> Developer creates a branch for XRD/Composition changes</li>
+  <li><strong>Review:</strong> Infrastructure team reviews the PR (XRD changes affect all users)</li>
+  <li><strong>Test:</strong> Merge to main triggers ArgoCD sync to a test environment</li>
+  <li><strong>Validate:</strong> Test a VM provision with the new XRD/Composition</li>
+  <li><strong>Production:</strong> Changes are automatically synced to production via ArgoCD</li>
+</ol>
+
+<div class="callout">
+  <div class="callout-label">XRD immutability warning</div>
+  XRDs are immutable in Crossplane. To change an XRD schema, you must delete the XRD (which deletes all existing XRs and Claims), then recreate it with the new schema. Plan your XRD design carefully before the first commit. Use <code>spec.xVersions</code> to support multiple XRD versions if you anticipate schema evolution.
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>What's Next: Your Task Plan</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>You now have the complete mental model and operational knowledge for the Crossplane + ArgoCD + OpenShift Virtualization stack. The next step is to produce your actionable task plan:</p>
+
+<ol>
+  <li><strong>Review the 18-step plan above</strong> and adapt it to your environment</li>
+  <li><strong>Answer the exercise questions</strong> to resolve the key design decisions</li>
+  <li><strong>Create a prioritized backlog</strong> — group tasks by phase and dependency</li>
+  <li><strong>Estimate effort</strong> — each task should be 1-3 days max; break larger tasks down</li>
+  <li><strong>Identify risks</strong> — storage class availability, OpenShift version compatibility, team training</li>
+  <li><strong>Define success criteria</strong> — "VM provisions from Git commit in under 5 minutes"</li>
+</ol>
+
+<p>The files we've created in this workspace are your reference material:</p>
+<ul>
+  <li><code>MISSION.md</code> — your goal and constraints</li>
+  <li><code>GLOSSARY.md</code> — terminology reference</li>
+  <li><code>RESOURCES.md</code> — external resources for deeper dives</li>
+  <li><code>learning-records/explainer-001-*.html</code> through <code>explainer-005-*.html</code> — all five explainers</li>
+</ul>
+
+<p>When you're ready to start building, the skills configured in <code>AGENTS.md</code> (to-issues, to-prd, triage, diagnose, tdd) can help you track progress and manage the implementation.</p>
+
+</body>
+</html>

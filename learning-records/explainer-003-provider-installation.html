@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Provider Installation on OpenShift</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+    color: var(--accent-cyan);
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+    padding: 0.75rem 1rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.green {
+    border-left-color: var(--accent-green);
+    background: rgba(63, 185, 80, 0.06);
+  }
+  .callout.orange {
+    border-left-color: var(--accent-orange);
+    background: rgba(210, 153, 34, 0.06);
+  }
+  .callout.red {
+    border-left-color: var(--accent-red);
+    background: rgba(248, 81, 73, 0.06);
+  }
+  .callout-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+  .diagram-title {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+  }
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+  }
+  .flow-box {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .flow-box.user { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); border: 1px solid rgba(188, 140, 255, 0.3); }
+  .flow-box.crossplane { background: rgba(88, 166, 255, 0.15); color: var(--accent); border: 1px solid rgba(88, 166, 255, 0.3); }
+  .flow-box.provider { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); border: 1px solid rgba(63, 185, 80, 0.3); }
+  .flow-box.runtime { background: rgba(57, 210, 192, 0.15); color: var(--accent-cyan); border: 1px solid rgba(57, 210, 192, 0.3); }
+  .flow-arrow { color: var(--text-muted); font-size: 1.2rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  td { background: var(--bg); }
+  ul, ol {
+    margin: 0.5rem 0 1rem 1.5rem;
+  }
+  li { margin-bottom: 0.4rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .answer-toggle {
+    display: inline-block;
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--accent-orange);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 1rem 0;
+    transition: background 0.2s;
+  }
+  .answer-toggle:hover {
+    background: rgba(210, 153, 34, 0.25);
+  }
+  .answer-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .answer-panel h2 {
+    margin-top: 1.5rem;
+    font-size: 1.2rem;
+  }
+  .answer-panel h3 {
+    font-size: 1rem;
+    color: var(--accent-orange);
+  }
+  .answer-panel pre {
+    font-size: 0.8rem;
+  }
+  .answer-table {
+    font-size: 0.85rem;
+  }
+  .answer-table th {
+    background: rgba(210, 153, 34, 0.1);
+    color: var(--accent-orange);
+  }
+  .answer-table td {
+    background: var(--bg);
+  }
+</style>
+<script>
+  function toggleAnswer(id) {
+    var panel = document.getElementById(id);
+    var btn = panel.previousElementSibling;
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      btn.textContent = 'Hide Answers ▴';
+    } else {
+      panel.style.display = 'none';
+      btn.textContent = 'Show Answers ▾';
+    }
+  }
+</script>
+</head>
+<body>
+
+<h1>Provider Installation on OpenShift</h1>
+
+<p>Crossplane Providers are the bridge between Crossplane's abstraction layer and the infrastructure API. For our VM stack, the KubeVirt provider translates Crossplane managed resources into KubeVirt VirtualMachine and DataVolume CRs. This explainer covers the full installation and configuration flow on OpenShift.</p>
+
+<div class="callout">
+  <div class="callout-label">Prerequisite knowledge</div>
+  You understand XRDs, Compositions, and how Crossplane reconciles resources. Now we're installing the pieces that let Crossplane actually talk to OpenShift's KubeVirt API.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>1. What a Crossplane Provider Is</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>A Crossplane Provider is a container image that bundles two things:</p>
+
+<ol>
+  <li><strong>CRDs</strong> — the Custom Resource Definitions for the infrastructure resources it manages (e.g., VirtualMachine, DataVolume for KubeVirt)</li>
+  <li><strong>A controller</strong> — a Kubernetes controller that watches those CRDs and reconciles them against the infrastructure API</li>
+</ol>
+
+<div class="diagram">
+  <div class="diagram-title">Provider Architecture</div>
+  <div class="flow">
+    <span class="flow-box crossplane">Crossplane</span>
+    <span class="flow-arrow">creates</span>
+    <span class="flow-box provider">Managed Resource CR</span>
+    <span class="flow-arrow">watches</span>
+    <span class="flow-box provider">Provider Controller</span>
+    <span class="flow-arrow">calls API</span>
+    <span class="flow-box runtime">KubeVirt API (OpenShift)</span>
+  </div>
+</div>
+
+<p>For the KubeVirt provider specifically:</p>
+
+<ul>
+  <li><strong>CRDs installed:</strong> VirtualMachine, DataVolume, VirtualMachineInstance, VirtualMachineClusterInstance, and related types from kubevirt.io and cdi.kubevirt.io</li>
+  <li><strong>Controller:</strong> reconciles these CRs by calling the OpenShift/KubeVirt API server</li>
+  <li><strong>Authentication:</strong> uses a ProviderConfig to determine how to connect (ServiceAccount, kubeconfig, or credentials)</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>2. Installation Methods</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>There are two ways to install a Crossplane provider on OpenShift:</p>
+
+<h3>Method A: xpkg (recommended for initial setup)</h3>
+
+<p>Use the Crossplane CLI to install the provider package. This is a one-time setup command:</p>
+
+<pre><code># Install the KubeVirt provider
+crossplane xpkg install-function \
+  crossplane/function-patch-and-transform:v0.14.0
+
+# Install the KubeVirt provider (not a function — a provider)
+crossplane xpkg install-provider \
+  crossplane/community-provider-kubevirt:v0.18.0</code></pre>
+
+<p>This creates:</p>
+<ul>
+  <li>A <code>Provider</code> CR in the <code>crossplane-system</code> namespace</li>
+  <li>A <code>Deployment</code> running the provider controller</li>
+  <li>All the managed resource CRDs in the cluster</li>
+</ul>
+
+<h3>Method B: ArgoCD GitOps (for ongoing management)</h3>
+
+<p>For production, manage the provider through GitOps. Create an ArgoCD Application that installs the provider from a manifest:</p>
+
+<pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-provider-kubevirt
+  namespace: argocd
+spec:
+  project: infrastructure
+  source:
+    repoURL: https://github.com/crossplane-community/provider-kubevirt
+    targetRevision: v0.18.0
+    path: package/crds
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true</code></pre>
+
+<div class="callout orange">
+  <div class="callout-label">GitOps consideration</div>
+  When managing providers via ArgoCD, be careful with CRD updates. ArgoCD's <code>prune: true</code> will delete CRDs when the provider is removed, which can cause issues if other resources depend on those CRDs. Consider using <code>ignoreDifferences</code> for CRDs that Crossplane manages.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>3. RBAC: What the Provider Needs</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The KubeVirt provider controller runs as a Deployment in <code>crossplane-system</code> and needs permissions to manage KubeVirt resources. On OpenShift, this requires a ServiceAccount, Role, and RoleBinding.</p>
+
+<h3>ServiceAccount</h3>
+
+<pre><code>apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: crossplane-kubevirt-provider
+  namespace: crossplane-system</code></pre>
+
+<h3>Role</h3>
+
+<p>The provider needs permissions to manage all KubeVirt and CDI resources:</p>
+
+<pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: crossplane-kubevirt-provider
+  namespace: crossplane-system
+rules:
+# VirtualMachine lifecycle
+- apiGroups:
+  - kubevirt.io
+  resources:
+  - virtualmachines
+  - virtualmachines/finalizers
+  - virtualmachines/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+# VirtualMachineInstance (created by KubeVirt controller, but provider may need to observe)
+- apiGroups:
+  - kubevirt.io
+  resources:
+  - virtualmachineinstances
+  verbs:
+  - get
+  - list
+  - watch
+# DataVolume lifecycle
+- apiGroups:
+  - cdi.kubevirt.io
+  resources:
+  - datavolumes
+  - datavolumes/finalizers
+  - datavolumes/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+# PVC management (DataVolumes create PVCs)
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete</code></pre>
+
+<h3>RoleBinding</h3>
+
+<pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: crossplane-kubevirt-provider
+  namespace: crossplane-system
+subjects:
+- kind: ServiceAccount
+  name: crossplane-kubevirt-provider
+  namespace: crossplane-system
+roleRef:
+  kind: Role
+  name: crossplane-kubevirt-provider
+  apiGroup: rbac.authorization.k8s.io</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Namespace scope vs. cluster scope</div>
+  The Role/RoleBinding above are namespace-scoped to <code>crossplane-system</code>. If your VMs span multiple namespaces, you need either:
+  <ul>
+    <li>A <strong>ClusterRole + ClusterRoleBinding</strong> (broader permissions, simpler setup)</li>
+    <li>Multiple <strong>Role + RoleBinding</strong> pairs (one per namespace where VMs are created)</li>
+  </ul>
+  For a single-tenant setup, namespace-scoped is fine. For multi-tenant, use ClusterRole.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>4. Attaching the ServiceAccount to the Provider</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>When you install the provider via <code>crossplane xpkg install-provider</code>, it creates a default ServiceAccount. To use our custom ServiceAccount, update the Provider resource:</p>
+
+<pre><code>apiVersion: pkg.crossplane.io/v1beta1
+kind: Provider
+metadata:
+  name: crossplane-community-provider-kubevirt
+spec:
+  package: crossplane/community-provider-kubevirt:v0.18.0
+  revisionActivationPolicy: Automatic
+  serviceAccountName: crossplane-kubevirt-provider</code></pre>
+
+<p>This tells Crossplane to run the provider controller pod with our ServiceAccount instead of the default one.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>5. ProviderConfig: Connection Configuration</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The ProviderConfig tells the provider how to connect to the infrastructure API. For the KubeVirt provider on OpenShift, there are two approaches:</p>
+
+<h3>Approach A: In-cluster (ServiceAccount-based)</h3>
+
+<p>Since the provider runs inside the OpenShift cluster and already has API access through its ServiceAccount, the ProviderConfig can be minimal:</p>
+
+<pre><code>apiVersion: kubevirt.io.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret  # or "Injected" for in-cluster auth
+    secretRef:
+      name: kubevirt-credentials  # optional — may not be needed for in-cluster
+      namespace: crossplane-system
+      key: credentials</code></pre>
+
+<div class="callout green">
+  <div class="callout-label">In-cluster auth</div>
+  On OpenShift, the provider controller can use the cluster's built-in service account token to authenticate to the API server. In many cases, the ProviderConfig's <code>credentials</code> section can be omitted entirely if the ServiceAccount has the right RBAC permissions. The key is RBAC — not credentials.
+</div>
+
+<h3>Approach B: External cluster (kubeconfig-based)</h3>
+
+<p>If your Crossplane runs outside the OpenShift cluster (managing it as a managed cluster), you need a kubeconfig:</p>
+
+<pre><code># Create a secret with the kubeconfig
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubevirt-credentials
+  namespace: crossplane-system
+type: Opaque
+stringData:
+  credentials: |
+    apiVersion: v1
+    kind: Config
+    clusters:
+    - cluster:
+        server: https://kubernetes.default.svc
+        certificate-authority-data: LS0tLS1CRUdJTi...
+    users:
+    - name: provider
+      user:
+        token: eyJhbGciOiJSUzI1NiIsImtpZCI6...
+    contexts:
+    - context:
+        cluster: openshift
+        user: provider
+        namespace: crossplane-system
+      name: default
+    current-context: default
+
+---
+apiVersion: kubevirt.io.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      name: kubevirt-credentials
+      namespace: crossplane-system
+      key: credentials</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>6. Installing CompositionFunctions</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>CompositionFunctions are separate from Providers. They run as sidecar pods during composition rendering and need their own ServiceAccount and permissions.</p>
+
+<h3>Patch-and-Transform Function</h3>
+
+<pre><code>apiVersion: pkg.crossplane.io/v1beta1
+kind: CompositionFunction
+metadata:
+  name: crossplane-function-patch-and-transform
+spec:
+  revisionActivationPolicy: Automatic
+  package: crossplane/function-patch-and-transform:v0.14.0</code></pre>
+
+<h3>Go-Templating Function</h3>
+
+<pre><code>apiVersion: pkg.crossplane.io/v1beta1
+kind: CompositionFunction
+metadata:
+  name: crossplane-function-go-templating
+spec:
+  revisionActivationPolicy: Automatic
+  package: crossplane/function-go-templating:v0.40.0</code></pre>
+
+<p>These create Deployments in <code>crossplane-system</code>. The pods run as the default ServiceAccount in that namespace, which needs permissions to read XRs and write managed resources.</p>
+
+<div class="callout green">
+  <div class="callout-label">OpenShift SCC note</div>
+  OpenShift's SecurityContextConstraints (SCC) may restrict what containers can do. The default <code>restricted</code> SCC should work for both the provider and function pods. If you see pod startup failures, check the pod events with <code>oc describe pod -n crossplane-system</code> for SCC denials.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>7. Verification Checklist</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>After installation, verify everything is working:</p>
+
+<table>
+  <thead>
+    <tr><th>Check</th><th>Command</th><th>Expected</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Provider is installed</td>
+      <td><code>oc get providers -n crossplane-system</code></td>
+      <td>Shows <code>crossplane-community-provider-kubevirt</code> with READY = True</td>
+    </tr>
+    <tr>
+      <td>Provider pods are running</td>
+      <td><code>oc get pods -n crossplane-system -l pkg.crossplane.io/provider=name</code></td>
+      <td>Pod status is Running, no restarts</td>
+    </tr>
+    <tr>
+      <td>Managed CRDs exist</td>
+      <td><code>oc get crd | grep kubevirt</code></td>
+      <td>Shows VirtualMachine, DataVolume, VirtualMachineInstance CRDs</td>
+    </tr>
+    <tr>
+      <td>CompositionFunctions are installed</td>
+      <td><code>oc get compositionfunctions -n crossplane-system</code></td>
+      <td>Shows both patch-and-transform and go-templating functions</td>
+    </tr>
+    <tr>
+      <td>ProviderConfig is ready</td>
+      <td><code>oc get providerconfig -n crossplane-system</code></td>
+      <td>Shows <code>default</code> with READY = True</td>
+    </tr>
+    <tr>
+      <td>Crossplane controllers are healthy</td>
+      <td><code>oc get pods -n crossplane-system</code></td>
+      <td>All pods Running, 0/0 restarts</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>8. Try This: Design the RBAC</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<div class="callout orange">
+  <div class="callout-label">Exercise</div>
+  Your team has three namespaces for VM workloads: <code>dev</code>, <code>staging</code>, and <code>prod</code>. Each namespace has its own team that manages VM Claims.
+  <ol>
+    <li>Would you use a namespace-scoped Role or a ClusterRole for the KubeVirt provider? Why?</li>
+    <li>What additional RBAC might you need for the CompositionFunctions (not the provider itself)?</li>
+    <li>How would you structure the ProviderConfig if you want to support different authentication per namespace?</li>
+  </ol>
+  Think through each question, then reveal the answers.
+</div>
+
+<button class="answer-toggle" onclick="toggleAnswer('answers-003')">Show Answers ▾</button>
+<div id="answers-003" class="answer-panel" style="display:none;">
+
+<h2>Exercise 003: Provider RBAC Design — Answer Key</h2>
+
+<h3>Q1: Namespace-scoped Role vs. ClusterRole?</h3>
+
+<p><strong>ClusterRole</strong> is the right choice here. Reasons:</p>
+<ul>
+  <li>The provider controller runs in a single namespace (<code>crossplane-system</code>) but needs to manage resources across multiple namespaces (<code>dev</code>, <code>staging</code>, <code>prod</code>)</li>
+  <li>A namespace-scoped Role only grants permissions in its own namespace — it wouldn't work across <code>dev</code>, <code>staging</code>, and <code>prod</code></li>
+  <li>A ClusterRole + ClusterRoleBinding gives the provider the needed cross-namespace access</li>
+</ul>
+
+<pre><code># Use ClusterRole for multi-namespace access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-kubevirt-provider
+rules:
+- apiGroups:
+  - kubevirt.io
+  resources:
+  - virtualmachines
+  - virtualmachines/finalizers
+  - virtualmachines/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+# ... (same resource rules, but ClusterRole is cluster-wide)
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: crossplane-kubevirt-provider
+subjects:
+- kind: ServiceAccount
+  name: crossplane-kubevirt-provider
+  namespace: crossplane-system
+roleRef:
+  kind: ClusterRole
+  name: crossplane-kubevirt-provider
+  apiGroup: rbac.authorization.k8s.io</code></pre>
+
+<h3>Q2: Additional RBAC for CompositionFunctions?</h3>
+
+<p>CompositionFunctions need permissions to:</p>
+<ul>
+  <li><strong>Read XRs and Claims</strong> — to access the spec parameters during composition rendering</li>
+  <li><strong>Create/Update managed resources</strong> — the output of the composition pipeline</li>
+  <li><strong>Read managed resources</strong> — to observe the results of previous pipeline steps</li>
+</ul>
+
+<p>In practice, Crossplane's function runtime handles most of this automatically. The function pods run with the <code>crossplane-system</code> default ServiceAccount, which Crossplane's controller already configures with the necessary permissions. You typically don't need to add extra RBAC for functions.</p>
+
+<h3>Q3: ProviderConfig per namespace?</h3>
+
+<p>ProviderConfigs are namespaced resources. You can create one per namespace:</p>
+
+<pre><code># ProviderConfig in each namespace
+apiVersion: kubevirt.io.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: dev
+  namespace: dev
+spec:
+  credentials:
+    source: ServiceAccount  # use the namespace's own SA
+
+---
+apiVersion: kubevirt.io.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: staging
+  namespace: staging
+spec:
+  credentials:
+    source: ServiceAccount
+
+---
+apiVersion: kubevirt.io.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: prod
+  namespace: prod
+spec:
+  credentials:
+    source: ServiceAccount</code></pre>
+
+<p>Each Composition can then reference the appropriate ProviderConfig via a <code>providerConfigRef</code> in the managed resource. However, for the KubeVirt provider on OpenShift, in-cluster auth usually means a single ProviderConfig is sufficient — the RBAC permissions are what matters, not per-namespace credentials.</p>
+
+<div class="callout">
+  <div class="callout-label">Practical recommendation</div>
+  For most OpenShift deployments, a single ClusterRole + ClusterRoleBinding + ProviderConfig in <code>crossplane-system</code> is sufficient. The RBAC gives the provider access to all namespaces, and the ProviderConfig uses in-cluster auth. Per-namespace ProviderConfigs add complexity without much benefit unless you have strict credential isolation requirements.
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>9. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>After you work through the exercise, our next explainer will cover:</p>
+<ul>
+  <li><strong>ArgoCD App-of-Apps bootstrap</strong> — concrete YAML for bootstrapping the entire stack from Git, including Crossplane providers, XRDs, Compositions, and workload Claims</li>
+  <li><strong>Putting it all together</strong> — a complete end-to-end walkthrough from Git commit to running VM</li>
+</ul>
+
+</body>
+</html>
