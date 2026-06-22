@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Build artifacts
+target/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
