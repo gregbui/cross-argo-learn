@@ -150,21 +150,21 @@
 <h1>VM Configuration Data: Passing KV Pairs to Linux VMs</h1>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>You need to pass key-value pairs (puppet profile names, app config, feature flags) into VMs at provisioning time. Puppet code already reads from a known file on each VM — you cannot change the puppet code or the file it reads.</p>
+<p>You need to pass key-value pairs (puppet profile names, app config, feature flags) into VMs at provisioning time. Puppet code already reads from a known file on each VM and can parse both YAML and JSON. You cannot change the puppet code or the file path it reads.</p>
 
-<p>The question: what's the most efficient and flexible way to get data from your Crossplane XR spec into that existing puppet config file on the VM?</p>
+<p>Recommended approach: <strong>YAML file via cloud-init <code>write_files</code></strong>. Puppet reads YAML natively, and YAML is human-readable for Git audit trails.</p>
 
 <div class="toc">
   <h2>Contents</h2>
   <ul>
     <li><a href="#problem">1. The Problem</a></li>
-    <li><a href="#options">2. Approaches Compared</a></li>
-    <li><a href="#recommended">3. Recommended: cloud-init write_files → Known Puppet Path</a></li>
-    <li><a href="#xr-schema">4. XRD Schema for Config Data</a></li>
-    <li><a href="#transformation">5. Composition: Transform XR → Puppet File Format</a></li>
-    <li><a href="#cloudinit-inject">6. Injecting via cloud-init</a></li>
-    <li><a href="#secrets">7. Handling Sensitive Data</a></li>
-    <li><a href="#updates">8. Updating Config Without Reboot</a></li>
+    <li><a href="#recommended">2. Recommended: YAML via cloud-init</a></li>
+    <li><a href="#xr-schema">3. XRD Schema for Config Data</a></li>
+    <li><a href="#transformation">4. Composition: Transform XR → YAML</a></li>
+    <li><a href="#cloudinit">5. Injecting via cloud-init</a></li>
+    <li><a href="#secrets">6. Handling Sensitive Data</a></li>
+    <li><a href="#updates">7. Updating Config Without Reboot</a></li>
+    <li><a href="#json-alternative">8. JSON Alternative (if needed)</a></li>
     <li><a href="#troubleshooting">9. Troubleshooting</a></li>
     <li><a href="#whats-next">10. What's Next</a></li>
   </ul>
@@ -177,20 +177,21 @@
 <p>Constraints:</p>
 
 <ul>
-  <li>Puppet code reads from a <strong>known file path</strong> on every VM (e.g. <code>/etc/puppet/profiles.yaml</code>)</li>
+  <li>Puppet code reads from a <strong>known file path</strong> on every VM</li>
   <li>Cannot modify the puppet code</li>
-  <li>Cannot change the file format puppet expects</li>
-  <li>Each VM needs its own config (different profiles, different app settings)</li>
+  <li>Cannot change the file path puppet reads</li>
+  <li>Puppet can parse YAML or JSON</li>
+  <li>Each VM needs its own config (different profiles, settings)</li>
   <li>Data must be Git-tracked via the XR</li>
 </ul>
 
-<p>This means the solution is a pipeline:</p>
+<p>Solution pipeline:</p>
 
 <div class="diagram">XR spec (YAML, Git-tracked)
   │
   │  Composition transforms...
   ▼
-  Puppet config file format (JSON/YAML/INI — whatever puppet reads)
+  Puppet config file (YAML format)
   │
   │  cloud-init write_files drops it...
   ▼
@@ -201,54 +202,10 @@
   VM configured</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="options">2. Approaches Compared</h2>
+<h2 id="recommended">2. Recommended: YAML via cloud-init</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<table>
-  <tr>
-    <th>Approach</th>
-    <th>Efficiency</th>
-    <th>Flexibility</th>
-    <th>Puppet Changes</th>
-    <th>Complexity</th>
-  </tr>
-  <tr>
-    <td><strong>1. cloud-init write_files → known path</strong></td>
-    <td>★★★★★</td>
-    <td>★★★★☆</td>
-    <td>None</td>
-    <td>Low</td>
-  </tr>
-  <tr>
-    <td><strong>2. Guest agent push (post-boot)</strong></td>
-    <td>★★☆☆☆</td>
-    <td>★★★★☆</td>
-    <td>None</td>
-    <td>Medium</td>
-  </tr>
-  <tr>
-    <td><strong>3. Puppet ENC API</strong></td>
-    <td>★★★☆☆</td>
-    <td>★★★★★</td>
-    <td>None</td>
-    <td>High</td>
-  </tr>
-  <tr>
-    <td><strong>4. Cron job on VM polling K8s API</strong></td>
-    <td>★★☆☆☆</td>
-    <td>★★★★☆</td>
-    <td>None</td>
-    <td>Medium</td>
-  </tr>
-</table>
-
-<p><strong>Approach 1 wins</strong> for first-boot provisioning. Zero network calls, instant availability, no puppet changes. Approaches 2-4 are alternatives if you need runtime updates.</p>
-
-<!-- ═══════════════════════════════════════════ -->
-<h2 id="recommended">3. Recommended: cloud-init write_files → Known Path</h2>
-<!-- ═══════════════════════════════════════════ -->
-
-<p>The composition transforms XR spec fields into the exact file format puppet reads, and cloud-init drops that file at the known path. No puppet code changes.</p>
+<p>The composition reads the XR spec and generates a YAML file. cloud-init drops it at the known puppet path. No puppet changes.</p>
 
 <div class="diagram">┌─────────────────────────────────────────────────────┐
 │  XR Spec (Git-tracked)                              │
@@ -261,7 +218,7 @@
 │      beta_api: false                                │
 └──────────────────────┬──────────────────────────────┘
                        │ Composition transforms
-                       │ XR → puppet file format
+                       │ XR YAML → puppet YAML
                        ▼
               ┌────────────────┐
               │  Composition   │
@@ -287,11 +244,20 @@
               │  applies config│
               └────────────────┘</code></pre>
 
+<p>Why YAML over JSON:</p>
+
+<ul>
+  <li>Puppet reads YAML natively — no extra parsing code needed</li>
+  <li>Human-readable in Git diffs — easy to audit config changes</li>
+  <li>Supports comments — add context in the file for future maintainers</li>
+  <li>Less verbose — no braces, commas, or quotes everywhere</li>
+</ul>
+
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="xr-schema">4. XRD Schema for Config Data</h2>
+<h2 id="xr-schema">3. XRD Schema for Config Data</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>Define a <code>configData</code> field on the XR. The structure is flexible — users pass whatever they need, and the composition maps it to the puppet file format.</p>
+<p>Define a <code>configData</code> field on the XR. Users pass whatever they need, and the composition maps it to the puppet YAML file.</p>
 
 <pre><code># xrd/xvirtualmachine.yaml
 apiVersion: apiextensions.crossplane.io/v1
@@ -313,7 +279,7 @@ spec:
                   type: object
                   description: >
                     Key-value pairs passed to the VM. The composition
-                    transforms these into the puppet config file format.
+                    transforms these into the puppet YAML config file.
                   nullable: true
                   properties:
                     puppet_profile:
@@ -339,7 +305,7 @@ spec:
                       type: object
                       description: >
                         Arbitrary KV pairs. Mapped directly to the
-                        puppet config file.
+                        puppet YAML file.
                       nullable: true
 
                 # ── Sensitive data ──
@@ -393,12 +359,10 @@ spec:
       api_key: "ak-123456"</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="transformation">5. Composition: Transform XR → Puppet File Format</h2>
+<h2 id="transformation">4. Composition: Transform XR → YAML</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>The composition reads the XR spec and generates the puppet config file content. The exact transformation depends on what format puppet reads. Here are the three most common cases:</p>
-
-<h3>5.1 If puppet reads YAML</h3>
+<p>The composition generates the YAML file content from the XR spec. This is the core transformation — it reads flat XR fields and produces the nested YAML structure puppet expects.</p>
 
 <pre><code># compositions/xvirtualmachine-pipeline.yaml
 - step: transform-config
@@ -447,63 +411,34 @@ spec:
                 {{- end }}
                 {{- end }}</code></pre>
 
-<h3>5.2 If puppet reads JSON</h3>
+<p>Generated output example — what puppet actually reads:</p>
 
-<pre><code>            data:
-              # JSON format — puppet reads this
-              profiles.json: |
-                {{- $root := dict -}}
-                {{- if .XR.spec.configData.puppet_profile -}}
-                  {{- $_ := set $root "puppet_profile" .XR.spec.configData.puppet_profile -}}
-                {{- end -}}
-                {{- if .XR.spec.configData.app_environment -}}
-                  {{- $_ := set $root "app_environment" .XR.spec.configData.app_environment -}}
-                {{- end -}}
-                {{- if .XR.spec.configData.app_config -}}
-                  {{- $_ := set $root "app_config" .XR.spec.configData.app_config -}}
-                {{- end -}}
-                {{- if .XR.spec.configData.features -}}
-                  {{- $_ := set $root "features" .XR.spec.configData.features -}}
-                {{- end -}}
-                {{- if .XR.spec.configData.custom -}}
-                  {{- $_ := set $root "custom" .XR.spec.configData.custom -}}
-                {{- end -}}
-                {{ $root | toPrettyJson }}</code></pre>
-
-<h3>5.3 If puppet reads INI / key=value</h3>
-
-<pre><code>            data:
-              # INI format
-              profiles.ini: |
-                # Auto-generated by Crossplane
-                [puppet]
-                {{- range .XR.spec.configData.puppet_profile }}
-                profile = {{ . }}
-                {{- end }}
-                {{- if .XR.spec.configData.app_environment }}
-                app_environment = {{ .XR.spec.configData.app_environment }}
-                {{- end }}
-
-                [app]
-                {{- range $key, $value := .XR.spec.configData.app_config }}
-                {{ $key }} = {{ $value }}
-                {{- end }}
-
-                [features]
-                {{- range $key, $value := .XR.spec.configData.features }}
-                {{ $key }} = {{ $value }}
-                {{- end }}
-
-                [custom]
-                {{- range $key, $value := .XR.spec.configData.custom }}
-                {{ $key }} = {{ $value }}
-                {{- end }}</code></pre>
+<pre><code># /etc/puppet/profiles.yaml (generated)
+# Auto-generated by Crossplane — do not edit
+# Source: workloads-dev/web-server-03
+---
+puppet_profile:
+  - base
+  - webserver
+  - monitoring
+app_environment: production
+app_config:
+  db_host: db.internal.example.org
+  db_port: "5432"
+  workers: 4
+  log_level: info
+features:
+  dark_mode: true
+  beta_api: false
+custom:
+  nginx_worker_connections: "2048"
+  redis_maxmemory: "256mb"</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="cloudinit-inject">6. Injecting via cloud-init</h2>
+<h2 id="cloudinit">5. Injecting via cloud-init</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>cloud-init drops the generated config file at the known puppet path. The composition creates a Secret containing the user-data, and KubeVirt injects it at boot.</p>
+<p>cloud-init drops the generated YAML file at the known puppet path. The composition creates a Secret containing the user-data, and KubeVirt injects it at boot.</p>
 
 <pre><code># compositions/xvirtualmachine-pipeline.yaml — continued
 - step: inject-cloudinit
@@ -588,25 +523,24 @@ spec:
                 final_message: "Config applied to {{ .XR.metadata.name }}"</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="secrets">7. Handling Sensitive Data</h2>
+<h2 id="secrets">6. Handling Sensitive Data</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>Non-sensitive config goes inline in cloud-init user-data. Sensitive values (DB passwords, API keys) need special handling:</p>
+<p>Non-sensitive config goes inline in cloud-init user-data. Sensitive values (DB passwords, API keys) need special handling.</p>
 
-<h3>7.1 Option A: Inline in user-data (simple, less secure)</h3>
+<h3>6.1 Simple: inline in user-data (dev/low-risk)</h3>
 
-<p>For non-production or low-risk secrets, inline them in the user-data Secret. They're base64-encoded in K8s but not encrypted at rest.</p>
+<p>For non-production or low-risk secrets, inline them. They're base64-encoded in K8s but not encrypted at rest.</p>
 
-<pre><code># In cloud-init user-data:
-- path: /etc/puppet/secrets.env
-  content: |
-    DB_PASSWORD={{ .XR.spec.secretData.db_password }}
-    API_KEY={{ .XR.spec.secretData.api_key }}
-  permissions: '0600'</code></pre>
+<pre><code>                - path: /etc/puppet/secrets.env
+                  content: |
+                    DB_PASSWORD={{ .XR.spec.secretData.db_password }}
+                    API_KEY={{ .XR.spec.secretData.api_key }}
+                  permissions: '0600'</code></pre>
 
-<h3>7.2 Option B: External Secrets Operator (recommended for prod)</h3>
+<h3>6.2 Production: External Secrets Operator (recommended)</h3>
 
-<p>For production, use the OpenShift External Secrets Operator to pull from Vault, AWS Secrets Manager, etc. The composition references the external secret:</p>
+<p>For production, use the OpenShift External Secrets Operator to pull from Vault, AWS Secrets Manager, etc.</p>
 
 <pre><code># compositions/xvirtualmachine-pipeline.yaml
 - step: external-secrets
@@ -653,7 +587,7 @@ spec:
                   remoteRef:
                     key: production/api/key</code></pre>
 
-<p>Then in cloud-init, reference the created K8s Secret:</p>
+<p>Then reference the created K8s Secret in cloud-init:</p>
 
 <pre><code>                - path: /etc/puppet/secrets.env
                   contentFrom:
@@ -663,32 +597,88 @@ spec:
                   permissions: '0600'</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="updates">8. Updating Config Without Reboot</h2>
+<h2 id="updates">7. Updating Config Without Reboot</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>If you need to update config on a running VM (not just at boot), you have two options:</p>
-
-<h3>8.1 Puppet runs periodically (default)</h3>
-
-<p>If puppet is running on a schedule (every 30min default), it will re-read the config file on each run. To trigger an immediate run:</p>
+<p>If you need to update config on a running VM, puppet picks up changes on its next run (default: every 30 minutes). To trigger immediately:</p>
 
 <pre><code># Via guest agent (requires guest agent running)
 oc virt guest-exec &lt;vm-name&gt; -n workloads-dev -- puppet agent -t
 
-# Via SSH
+# Via SSH port-forward
 oc port-forward &lt;vm-name&gt; 2222:22 -n workloads-dev
 ssh -p 2222 cloud-user@localhost "sudo puppet agent -t"</code></pre>
 
-<h3>8.2 Update the XR → ArgoCD syncs → puppet picks it up</h3>
+<p>Update flow — edit XR → ArgoCD syncs → puppet reads new file:</p>
 
 <pre><code># Update the VirtualMachineClaim
 oc edit virtualmachineclaim web-server-03 -n workloads-dev
 # Change configData.puppet_profile, save
 # ArgoCD detects drift, syncs
 # Puppet runs on next cycle, reads new file
-# VM reconfigured</code></pre>
+# VM reconfigured — no reboot needed</code></pre>
 
-<p>This gives you near-real-time config updates without rebooting the VM.</p>
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="json-alternative">8. JSON Alternative (if needed)</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>If puppet code specifically needs JSON, the composition generates the same data as JSON instead. Use this only if your puppet code explicitly requires it.</p>
+
+<pre><code># compositions/xvirtualmachine-pipeline.yaml
+- step: transform-config-json
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+    - apiVersion: pt.fn.crossplane.io/v1
+      kind: Resources
+      resources:
+        - name: configmap
+          base:
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: '{{ .XR.metadata.name }}-puppet-config'
+              namespace: '{{ .XR.metadata.namespace }}'
+            data:
+              profiles.json: |
+                {{- $root := dict -}}
+                {{- if .XR.spec.configData.puppet_profile -}}
+                  {{- $_ := set $root "puppet_profile" .XR.spec.configData.puppet_profile -}}
+                {{- end -}}
+                {{- if .XR.spec.configData.app_environment -}}
+                  {{- $_ := set $root "app_environment" .XR.spec.configData.app_environment -}}
+                {{- end -}}
+                {{- if .XR.spec.configData.app_config -}}
+                  {{- $_ := set $root "app_config" .XR.spec.configData.app_config -}}
+                {{- end -}}
+                {{- if .XR.spec.configData.features -}}
+                  {{- $_ := set $root "features" .XR.spec.configData.features -}}
+                {{- end -}}
+                {{- if .XR.spec.configData.custom -}}
+                  {{- $_ := set $root "custom" .XR.spec.configData.custom -}}
+                {{- end -}}
+                {{ $root | toPrettyJson }}</code></pre>
+
+<p>Generated JSON output:</p>
+
+<pre><code>{
+  "puppet_profile": ["base", "webserver", "monitoring"],
+  "app_environment": "production",
+  "app_config": {
+    "db_host": "db.internal.example.org",
+    "db_port": "5432",
+    "workers": 4,
+    "log_level": "info"
+  },
+  "features": {
+    "dark_mode": true,
+    "beta_api": false
+  },
+  "custom": {
+    "nginx_worker_connections": "2048",
+    "redis_maxmemory": "256mb"
+  }
+}</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
 <h2 id="troubleshooting">9. Troubleshooting</h2>
@@ -710,7 +700,7 @@ oc get secret &lt;vm-name&gt;-cloudinit-secret -n workloads-dev \
 
 <h3>9.2 Puppet not reading the file</h3>
 
-<pre><code># Verify file format is correct
+<pre><code># Verify file format is valid YAML
 cat /etc/puppet/profiles.yaml
 python3 -c "import yaml; yaml.safe_load(open('/etc/puppet/profiles.yaml'))"
 
@@ -727,20 +717,22 @@ ls -la /etc/puppet/profiles.yaml
 stat -c '%a %U %G' /etc/puppet/profiles.yaml
 
 # Should be 0644 for config, 0600 for secrets
-# If wrong, fix:
 sudo chmod 0644 /etc/puppet/profiles.yaml
 sudo chown root:root /etc/puppet/profiles.yaml</code></pre>
 
-<h3>9.4 Sensitive data not injected</h3>
+<h3>9.4 YAML parsing errors</h3>
 
-<pre><code># Check if the secret was created
-oc get secret &lt;vm-name&gt;-db-password -n workloads-dev
-
-# Check ExternalSecret status
-oc get externalsecret &lt;vm-name&gt;-db-password -n workloads-dev -o yaml | grep -A5 status
-
-# Check if secrets.env has content
-cat /etc/puppet/secrets.env</code></pre>
+<pre><code># Common YAML issues:
+# 1. Unquoted strings with special chars (colons, braces)
+#    Bad:  db_host: db.example.org:5432
+#    Good: db_host: "db.example.org:5432"
+#
+# 2. Missing quotes on values with leading/trailing spaces
+# 3. Indentation errors in nested maps
+#
+# Debug by printing the generated user-data
+oc get secret &lt;vm-name&gt;-cloudinit-secret -n workloads-dev \
+  -o jsonpath='{.data.user-data}' | base64 -d | grep -A 50 write_files</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
 <h2 id="whats-next">10. What's Next</h2>
