@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OS Image Management for VM Workloads</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b94e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+  li { margin-bottom: 0.5rem; }
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .callout-label {
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+  .callout.warning { border-left-color: var(--accent-orange); }
+  .callout.warning .callout-label { color: var(--accent-orange); }
+  .callout.danger { border-left-color: var(--accent-red); }
+  .callout.danger .callout-label { color: var(--accent-red); }
+  .callout.success { border-left-color: var(--accent-green); }
+  .callout.success .callout-label { color: var(--accent-green); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: #f0f6fc;
+    font-weight: 600;
+  }
+  td { background: var(--bg); }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .toc h2 {
+    font-size: 1.1rem;
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    border: none;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc li { margin-bottom: 0.25rem; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ -->
+<h1>OS Image Management for VM Workloads</h1>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>VM workloads need base operating system images — disk snapshots with a known OS, packages, and configuration. In a Crossplane + KubeVirt stack, managing these images at scale requires a disciplined approach: image templating, registry lifecycle, security scanning, and controlled rollout. This explainer covers the full lifecycle.</p>
+
+<div class="toc">
+  <h2>Contents</h2>
+  <ul>
+    <li><a href="#why-image-management">1. Why Image Management Matters</a></li>
+    <li><a href="#image-registry">2. Image Registry Architecture</a></li>
+    <li><a href="#image-templates">3. Image Templates in XRDs</a></li>
+    <li><a href="#image-lifecycle">4. Image Lifecycle: Build → Scan → Push → Deploy</a></li>
+    <li><a href="#image-update-strategies">5. Image Update Strategies</a></li>
+    <li><a href="#datavolume-images">6. DataVolumes and Base Images</a></li>
+    <li><a href="#xversions-images">7. Image Schema Evolution with xVersions</a></li>
+    <li><a href="#troubleshooting">8. Troubleshooting</a></li>
+    <li><a href="#whats-next">9. What's Next</a></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="why-image-management">1. Why Image Management Matters</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Without image management, every VM composition references raw image URLs scattered across compositions. This creates:</p>
+
+<ul>
+  <li><strong>Inconsistency</strong> — different environments pull different image versions</li>
+  <li><strong>Security gaps</strong> — no scanning pipeline, vulnerable images run in production</li>
+  <li><strong>Slow rollouts</strong> — updating an image requires editing every composition</li>
+  <li><strong>No audit trail</strong> — can't tell which VMs run which image version</li>
+</ul>
+
+<p>The solution: a centralized image registry with templated references, automated scanning, and controlled promotion across environments.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="image-registry">2. Image Registry Architecture</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>In an on-prem OpenShift stack, you need a container image registry that stores both container images (for functions/providers) and VM disk images (for VMs). The pattern uses two registries:</p>
+
+<div class="diagram">┌─────────────────────────────────────────────────────┐
+│                   Your On-Prem Stack                │
+│                                                     │
+│  ┌─────────────────┐    ┌───────────────────────┐   │
+│  │  Container       │    │  VM Disk Image         │   │
+│  │  Registry        │    │  Registry              │   │
+│  │  (Registry CR)   │    │  (Registry CR)         │   │
+│  │                  │    │                        │   │
+│  │  • Functions     │    │  • CentOS Stream 9     │   │
+│  │  • Providers     │    │  • RHEL 9              │   │
+│  │  • Apps          │    │  • Ubuntu 22.04        │   │
+│  │                  │    │  • Windows Server      │   │
+│  └────────┬────────┘    └──────────┬────────────┘   │
+│           │                        │                 │
+│           ▼                        ▼                 │
+│  ┌──────────────────────────────────────────────┐   │
+│  │  Image Build Pipeline (CI/CD)                │   │
+│  │  • Packer / cloud-image-builder              │   │
+│  │  • Trivy / Grype scanning                    │   │
+│  │  • Push to registry                            │   │
+│  └──────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────┘</div>
+
+<p>OpenShift ships with a built-in Image Registry Operator. Deploy it and configure it for on-prem storage:</p>
+
+<pre><code># Deploy the OpenShift Image Registry
+oc patch configs.imageregistry.operator.openshift.io/cluster \
+  --patch '{"spec":{"managementState":"Managed","storage":{"pvc":{"claim":"image-registry-claim"}}}}' \
+  --type=merge
+
+# Verify
+oc get pods -n openshift-image-registry
+oc get route -n openshift-image-registry</code></pre>
+
+<p>For VM disk images, you can use the same registry (container images with <code>.tar.gz</code> extensions) or a separate object store (MinIO/S3) for larger disk images. The key is having a single source of truth that all environments reference.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="image-templates">3. Image Templates in XRDs</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Instead of hardcoding image URLs in compositions, define an <code>imageTemplate</code> field in your XRD. This lets users reference images by a short name, while the composition resolves it to the full registry path.</p>
+
+<pre><code># xrd/xvirtualmachine.yaml — XRD schema
+apiVersion: apiextensions.crossplane.io/v1
+kind: XRD
+metadata:
+  name: xvirtualmachines.example.org
+spec:
+  names:
+    kind: XVirtualMachine
+    plural: xvirtualmachines
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                imageTemplate:
+                  type: string
+                  description: >
+                    Named image template. Resolved by the composition
+                    to a full registry path. Examples: centos-stream-9,
+                    rhel-9, ubuntu-22.04
+                  enum:
+                    - centos-stream-9
+                    - rhel-9
+                    - ubuntu-22.04
+                    - windows-server-2022
+                imageRegistry:
+                  type: string
+                  description: >
+                    Override the default image registry. Usually not needed.
+                  default: registry.internal.example.org/vm-images
+                imageTag:
+                  type: string
+                  description: >
+                    Override the image tag. Defaults to the template's
+                    default tag.
+                  default: latest</code></pre>
+
+<p>The composition maps the template name to a full image reference. This indirection is critical — it means image updates only require updating the composition, not every VirtualMachine claim:</p>
+
+<pre><code># compositions/xvirtualmachine-pipeline.yaml
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xvirtualmachine-pipeline
+  labels:
+    type: pipeline
+    image-policy: managed
+spec:
+  writeRevisionsTo: .
+  patchSets:
+    - name: image-config
+      patches:
+        # Resolve imageTemplate to full registry path
+        - fromFieldPath: spec.imageRegistry
+          toFieldPath: spec.imageRegistry
+        - fromFieldPath: spec.imageTag
+          toFieldPath: spec.imageTag
+  pipeline:
+    - step: resolve-images
+      functionRef:
+        name: crossplane-function-patch-and-transform
+      inputs:
+        - apiVersion: pt.fn.crossplane.io/v1
+          kind: Resources
+          resources:
+            - name: virtualmachine
+              base:
+                apiVersion: kubevirt.io/v1
+                kind: VirtualMachine
+                spec:
+                  dataVolumeTemplates:
+                    - metadata:
+                        name: '{{ .XR.metadata.name }}-disk'
+                      spec:
+                        pvc:
+                          accessModes:
+                            - ReadWriteOnce
+                          resources:
+                            requests:
+                              storage: '{{ .XR.spec.disks.root.size | default "20Gi" }}'
+                          storageClassName: '{{ .XR.spec.disks.root.storageClass | default "ocs.external.ceph.rook.io" }}'
+                          volumeMode: Filesystem
+            - name: datavolume
+              base:
+                apiVersion: cdi.kubevirt.io/v1beta1
+                kind: DataVolume
+                spec:
+                  source:
+                    http:
+                      url: 'PLACEHOLDER_IMAGE_URL'
+                  pvc:
+                    accessModes:
+                      - ReadWriteOnce
+                    resources:
+                      requests:
+                        storage: '{{ .XR.spec.disks.root.size | default "20Gi" }}'
+                    storageClassName: '{{ .XR.spec.disks.root.storageClass | default "ocs.external.ceph.rook.io" }}'</code></pre>
+
+<p>For the actual URL resolution, use a Go Templating function that reads from a ConfigMap containing the image registry mapping:</p>
+
+<pre><code># compositions/config/image-registry-mapping.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: image-registry-mapping
+  namespace: crossplane-system
+data:
+  templates.yaml: |
+    centos-stream-9:
+      url: "https://registry.internal.example.org/vm-images/centos-stream-9:2024.06.1"
+      defaultTag: "2024.06.1"
+      scanned: true
+      scanDate: "2024-06-01"
+    rhel-9:
+      url: "https://registry.internal.example.org/vm-images/rhel-9:2024.05.3"
+      defaultTag: "2024.05.3"
+      scanned: true
+      scanDate: "2024-05-15"
+    ubuntu-22.04:
+      url: "https://registry.internal.example.org/vm-images/ubuntu-22.04:2024.04.2"
+      defaultTag: "2024.04.2"
+      scanned: true
+      scanDate: "2024-04-20"
+    windows-server-2022:
+      url: "https://registry.internal.example.org/vm-images/windows-server-2022:2024.03.1"
+      defaultTag: "2024.03.1"
+      scanned: true
+      scanDate: "2024-03-10"</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="image-lifecycle">4. Image Lifecycle: Build → Scan → Push → Deploy</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Every image that enters your stack goes through a strict pipeline. No exceptions.</p>
+
+<div class="diagram">┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│  BUILD   │───>│  SCAN    │───>│  PUSH    │───>│  DEPLOY  │
+│          │    │          │    │          │    │          │
+│ Packer   │    │ Trivy    │    │ Registry │    │ Update   │
+│ cloud-   │    │ Grype    │    │ Push     │    │ Config   │
+│ image-   │    │ CVE check│    │ to       │    │ Map in   │
+│ builder  │    │ License  │    │ registry │    │ cross-   │
+│          │    │ check    │    │          │    │ plane-   │
+│          │    │          │    │          │    │ system   │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘
+     │               │               │               │
+     ▼               ▼               ▼               ▼
+  Base OS        Block if        Tag with        Rollout
+  install        critical CVEs   git SHA +       to dev only
+  + packages     Block if        date stamp      Verify, then
+  + hardening    license         (YYYY.MM.D)     promote
+  + cloud-init   violations
+  + guest-agent  compliance
+  + monitoring   checks</code></pre>
+
+<h3>4.1 Build Phase</h3>
+
+<p>Use Packer or Red Hat's <code>cloud-image-builder</code> to create base images. Packer is provider-agnostic; cloud-image-builder is RHEL-specific but faster for RHEL images.</p>
+
+<pre><code># Packer template for CentOS Stream 9
+# packer/templates/centos-stream-9.pkr.hcl
+
+variable "base_iso" {
+  type    = string
+  default = "https://downloads.centos.org/CentOS/9/stream/isos/x86_64/CentOS-Stream-9-latest-x86_64.iso"
+}
+
+source "qemu" "centos-stream-9" {
+  iso_url     = var.base_iso
+  iso_checksum = "sha256:..."
+  disk_size   = "20480"
+  vm_size     = "4C/8G/20G"
+  ssh_username = "packer"
+  ssh_password = "packer"
+}
+
+build {
+  sources = ["source.qemu.centos-stream-9"]
+
+  # Install base packages
+  provisioner "shell" {
+    inline = [
+      "sudo dnf install -y qemu-guest-agent net-tools wget curl",
+      "sudo dnf install -y chrony tmux htop vim",
+      "sudo dnf install -y containerd podman",
+    ]
+  }
+
+  # Harden the system
+  provisioner "shell" {
+    script = "provisioners/hardening.sh"
+  }
+
+  # Install monitoring agent
+  provisioner "shell" {
+    script = "provisioners/install-monitoring.sh"
+  }
+
+  # Install and enable guest agent
+  provisioner "shell" {
+    inline = [
+      "sudo systemctl enable qemu-guest-agent",
+      "sudo systemctl start qemu-guest-agent",
+    ]
+  }
+
+  # Clean up for small image size
+  provisioner "shell" {
+    inline = [
+      "sudo dnf clean all",
+      "sudo rm -rf /var/cache/dnf",
+      "sudo truncate -s 0 /var/log/*.log",
+    ]
+  }
+}</code></pre>
+
+<pre><code># provisioners/hardening.sh
+#!/bin/bash
+set -euo pipefail
+
+# Disable unused services
+sudo systemctl disable postfix
+sudo systemctl disable firewalld
+
+# Configure SSH hardening
+sudo tee /etc/ssh/sshd_config.d/hardening.conf << 'EOF'
+PermitRootLogin no
+PasswordAuthentication no
+X11Forwarding no
+MaxAuthTries 3
+EOF
+
+# Configure firewall for VM networking
+sudo firewall-cmd --permanent --add-port=22/tcp
+sudo firewall-cmd --permanent --add-port=6789/tcp  # Ceph RBD
+sudo firewall-cmd --reload
+
+# Configure chrony for time sync
+sudo timedatectl set-ntp true
+
+# Set hostname template
+echo "hostnamectl set-hostname {{ .Hostname }}" > /etc/profile.d/hostname.sh</code></pre>
+
+<h3>4.2 Scan Phase</h3>
+
+<p>Scan every image before it enters the registry. Use Trivy for CVE scanning and Grype for license compliance.</p>
+
+<pre><code>#!/bin/bash
+# scripts/scan-image.sh
+# Usage: scan-image.sh &lt;image-url&gt;
+
+set -euo pipefail
+
+IMAGE_URL="$1"
+SCAN_REPORT="scan-$(date +%Y%m%d-%H%M%S).json"
+
+echo "=== Scanning image: $IMAGE_URL ==="
+
+# CVE scan
+echo "Running Trivy CVE scan..."
+trivy image \
+  --severity HIGH,CRITICAL \
+  --exit-code 1 \
+  --format json \
+  --output "$SCAN_REPORT" \
+  "$IMAGE_URL"
+
+# License compliance
+echo "Running Grype license check..."
+grype "$IMAGE_URL" \
+  --fail-on high \
+  --only-fixed \
+  -o json \
+  > license-report.json
+
+# Check results
+VULN_COUNT=$(jq '.matches | length' "$SCAN_REPORT")
+if [ "$VULN_COUNT" -gt 0 ]; then
+  echo "FAIL: $VULN_COUNT vulnerabilities found"
+  jq '.matches[] | "\(.vulnerability.severity): \(.vulnerability.id) - \(.vulnerability.title)"' "$SCAN_REPORT"
+  exit 1
+fi
+
+echo "PASS: Image is clean"
+echo "Report: $SCAN_REPORT"
+echo "License report: license-report.json"</code></pre>
+
+<h3>4.3 Push Phase</h3>
+
+<pre><code>#!/bin/bash
+# scripts/push-image.sh
+# Usage: push-image.sh &lt;image-name&gt; &lt;image-path&gt;
+
+set -euo pipefail
+
+IMAGE_NAME="$1"
+IMAGE_PATH="$2"
+REGISTRY="registry.internal.example.org/vm-images"
+TAG=$(git rev-parse --short HEAD)-$(date +%Y.%m.%d)
+
+echo "Pushing $IMAGE_NAME:$TAG to $REGISTRY"
+
+# Convert disk image to OCI format for registry
+# (or push as a raw .qcow2 if your CD supports it)
+docker load -i "$IMAGE_PATH"
+docker tag "$IMAGE_PATH" "$REGISTRY/$IMAGE_NAME:$TAG"
+docker push "$REGISTRY/$IMAGE_NAME:$TAG"
+
+# Update the image registry mapping ConfigMap
+# This is done via a separate CI job that patches the ConfigMap
+echo "Update image-registry-mapping ConfigMap with:"
+echo "  $IMAGE_NAME:"
+echo "    url: \"$REGISTRY/$IMAGE_NAME:$TAG\""
+echo "    defaultTag: \"$TAG\""
+echo "    scanned: true"
+echo "    scanDate: \"$(date +%Y-%m-%d)\""</code></pre>
+
+<h3>4.4 Deploy Phase</h3>
+
+<p>After scanning and pushing, update the image registry mapping ConfigMap in <code>crossplane-system</code>. This is typically done by a CI/CD pipeline job, not manually:</p>
+
+<pre><code># CI/CD pipeline step (GitLab CI / GitHub Actions)
+# After scan passes and image is pushed:
+
+- name: Update image registry mapping
+  run: |
+    kubectl patch configmap image-registry-mapping \
+      -n crossplane-system \
+      --type merge \
+      -p "$(cat << 'YAML'
+data:
+  templates.yaml: |
+    centos-stream-9:
+      url: "registry.internal.example.org/vm-images/centos-stream-9:2024.06.2"
+      defaultTag: "2024.06.2"
+      scanned: true
+      scanDate: "2024-06-15"
+    ...
+YAML
+)"</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="image-update-strategies">5. Image Update Strategies</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>When a new image version is ready, how do you roll it out? Three strategies, each with tradeoffs:</p>
+
+<table>
+  <tr>
+    <th>Strategy</th>
+    <th>How</th>
+    <th>Pros</th>
+    <th>Cons</th>
+  </tr>
+  <tr>
+    <td><strong>New VMs only</strong></td>
+    <td>Update ConfigMap. Existing VMs keep old image.</td>
+    <td>Zero risk, instant rollout</td>
+    <td>Drift between old and new VMs</td>
+  </tr>
+  <tr>
+    <td><strong>Snapshot → Recreate</strong></td>
+    <td>Snapshot VMs, delete, recreate with new image.</td>
+    <td>Consistent image across all VMs</td>
+    <td>Downtime, data loss risk</td>
+  </tr>
+  <tr>
+    <td><strong>In-place update</strong></td>
+    <td>Use cloud-init to update packages in running VMs.</td>
+    <td>No downtime, no recreation</td>
+    <td>Complex, image drift possible</td>
+  </tr>
+</table>
+
+<p>Recommended approach for most teams: <strong>new VMs only</strong> for the first 2 weeks, then <strong>snapshot → recreate</strong> during a maintenance window.</p>
+
+<h3>5.1 New VMs Only — Zero Risk</h3>
+
+<p>Just update the ConfigMap. No changes to existing VMs. New claims automatically get the new image:</p>
+
+<pre><code># User creates a new VM — gets the latest image
+apiVersion: example.org/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: web-server-03
+  namespace: workloads-dev
+spec:
+  parameters:
+    imageTemplate: centos-stream-9
+    # No imageTag specified — uses default from ConfigMap
+    # which now points to 2024.06.2
+    hostname: web-server-03
+    cpu: 2
+    memory: 4Gi</code></pre>
+
+<h3>5.2 Snapshot → Recreate — Controlled Rollout</h3>
+
+<p>For existing VMs, use a runbook-style process:</p>
+
+<pre><code>#!/bin/bash
+# RUNBOOK: Update VMs to new image
+# Step 1: Snapshot all VMs in the target namespace
+oc get virtualmachines -n workloads-dev -o name | while read vm; do
+  vm_name=$(echo $vm | cut -d/ -f2)
+  echo "Creating snapshot for $vm_name..."
+  oc patch "$vm" -n workloads-dev \
+    --type merge \
+    -p '{"spec":{"runStrategy":"Halted"}}'
+  # Wait for VM to stop
+  oc wait --for=condition=Stopped "$vm" -n workloads-dev --timeout=300s
+  # Create DataVolume snapshot
+  oc create datavolumesnapshot \
+    snapshot-$vm-name-$(date +%s) \
+    -n workloads-dev \
+    --source="$vm"
+done
+
+# Step 2: Delete and recreate VMs (ArgoCD will handle this)
+# The ArgoCD Application set will reconcile with the new image
+# from the updated ConfigMap
+
+# Step 3: Verify all VMs are running with new image
+oc get virtualmachines -n workloads-dev -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.domain.devices.disks[0].disk.pvc.name}{"\n"}{end}'</code></pre>
+
+<div class="callout warning">
+  <div class="callout-label">Warning</div>
+  Always create snapshots before bulk VM operations. If something goes wrong during recreation, you can restore from the snapshot. Test the restore process in dev before doing it in production.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="datavolume-images">6. DataVolumes and Base Images</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>DataVolumes (DVs) are the KubeVirt mechanism for populating PVCs with disk images. There are two patterns:</p>
+
+<h3>6.1 HTTP Source (Pull-based)</h3>
+
+<p>The most common pattern — DV downloads the image from a URL at provisioning time:</p>
+
+<pre><code>apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: centos-stream-9-base
+  namespace: vm-images
+spec:
+  source:
+    http:
+      url: "https://registry.internal.example.org/vm-images/centos-stream-9:2024.06.2"
+  pvc:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 20Gi
+    storageClassName: ocs.external.ceph.rook.io</code></pre>
+
+<p>Pros: Simple, no pre-provisioning needed. Cons: Every VM downloads the image — slow for large images, wastes bandwidth.</p>
+
+<h3>6.2 Pre-populated PVCs (Push-based)</h3>
+
+<p>Pre-create PVCs with base images, then compose from them. This is faster for high-volume VM provisioning:</p>
+
+<pre><code># Pre-provision base image PVCs
+for image in centos-stream-9 rhel-9 ubuntu-22.04; do
+  oc apply -f - << EOF
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: base-$image
+  namespace: vm-images
+spec:
+  source:
+    http:
+      url: "https://registry.internal.example.org/vm-images/$image:2024.06.2"
+  pvc:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 20Gi
+    storageClassName: ocs.external.ceph.rook.io
+  preallocation: true
+EOF
+done</code></pre>
+
+<p>Then in your composition, reference the pre-populated PVC instead of downloading:</p>
+
+<pre><code># In the composition pipeline, reference pre-populated PVCs
+- name: virtualmachine
+  base:
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+    spec:
+      dataVolumeTemplates:
+        - metadata:
+            name: '{{ .XR.metadata.name }}-disk'
+          spec:
+            pvc:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: '20Gi'
+              storageClassName: 'ocs.external.ceph.rook.io'
+              volumeMode: Filesystem
+            source:
+              pvc:
+                name: 'base-{{ .XR.spec.imageTemplateName }}'
+                namespace: 'vm-images'</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="xversions-images">7. Image Schema Evolution with xVersions</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>As your image requirements evolve, your XRD schema will need to change. Crossplane's <code>xVersions</code> feature lets you version your XRD without breaking existing XRs.</p>
+
+<pre><code># xrd/xvirtualmachine.yaml — with xVersions
+apiVersion: apiextensions.crossplane.io/v1
+kind: XRD
+metadata:
+  name: xvirtualmachines.example.org
+spec:
+  names:
+    kind: XVirtualMachine
+    plural: xvirtualmachines
+  versions:
+    # v1alpha1 — original schema
+    - name: v1alpha1
+      served: true
+      referenceable: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                imageTemplate:
+                  type: string
+                imageRegistry:
+                  type: string
+                imageTag:
+                  type: string
+
+    # v1alpha2 — added imageDigest and scanStatus
+    - name: v1alpha2
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                imageTemplate:
+                  type: string
+                imageRegistry:
+                  type: string
+                imageTag:
+                  type: string
+                # New fields for v1alpha2
+                imageDigest:
+                  type: string
+                  description: SHA256 digest of the image (for immutable references)
+                requireScanned:
+                  type: boolean
+                  description: Require image to have passed security scan
+                  default: true
+                imageAgeMaxDays:
+                  type: integer
+                  description: Maximum age of image in days
+                  default: 90</code></pre>
+
+<p>When you promote <code>v1alpha2</code> to <code>referenceable: true</code>, new VirtualMachineClaims use the new schema. Existing XRs created with <code>v1alpha1</code> continue to work.</p>
+
+<div class="callout success">
+  <div class="callout-label">Best practice</div>
+  Always keep the old version <code>served: true</code> for at least one release cycle after promoting a new version. This gives users time to migrate their claims. Use ArgoCD sync waves to coordinate the rollout.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="troubleshooting">8. Troubleshooting</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<h3>8.1 DataVolume stuck in Pending</h3>
+
+<pre><code># Check DV status
+oc get datavolume -n workloads-dev
+
+# Common causes:
+# 1. Image URL unreachable
+oc logs -n cdi $(oc get pods -n cdi -l cdi-control-plane=controller -o name) | grep -i "http"
+
+# 2. PVC storage class not found
+oc get storageclass
+
+# 3. CDI importer pod crashed
+oc get pods -n cdi -l cdi=importer
+oc logs -n cdi &lt;importer-pod-name&gt;</code></pre>
+
+<h3>8.2 VM fails to start after image update</h3>
+
+<pre><code># Check if the image digest changed
+oc get xvirtualmachine -n workloads-dev -o yaml | grep imageDigest
+
+# Check VM events
+oc describe virtualmachine &lt;vm-name&gt; -n workloads-dev
+
+# Common issue: cloud-init fails because the new image
+# doesn't have the expected packages. Check guest agent logs:
+oc debug vm/&lt;vm-name&gt; -n workloads-dev
+# Inside the debug pod:
+journalctl -u qemu-guest-agent
+journalctl -u cloud-init</code></pre>
+
+<h3>8.3 Image scan blocking rollout</h3>
+
+<pre><code># Check scan status from ConfigMap
+oc get configmap image-registry-mapping -n crossplane-system -o yaml
+
+# If a new image failed scanning, remove it from the mapping
+# and revert to the previous version
+kubectl patch configmap image-registry-mapping \
+  -n crossplane-system \
+  --type merge \
+  -p '{"data":{"templates.yaml":"centos-stream-9:\n  url: ...\n  scanned: false\n  failedScan: true\n  reason: \"Critical CVE found\""}}'</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="whats-next">9. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>With image management in place, your team has a controlled pipeline for VM base images. The next topics to cover:</p>
+
+<ul>
+  <li><strong>Cloud-init & guest agent</strong> — configuring VMs at boot time, networking, SSH keys, and guest agent integration for accurate status reporting</li>
+  <li><strong>Multi-environment rollout</strong> — managing image promotion across dev/staging/prod with ArgoCD application sets</li>
+  <li><strong>Monitoring & alerting</strong> — tracking image freshness, scan failures, and VM provisioning performance</li>
+</ul>
+
+</body>
+</html>
