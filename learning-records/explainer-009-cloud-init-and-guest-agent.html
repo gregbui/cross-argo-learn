@@ -523,28 +523,29 @@ sudo qemu-ga --version</code></pre>
 
 <p>The guest agent's status flows through KubeVirt → Crossplane → your application. Understanding this flow is critical for monitoring and health checks.</p>
 
-<div class="diagram">┌──────────┐     ┌──────────────┐     ┌───────────────┐
-│  VM      │────>│  KubeVirt    │────>│  Crossplane   │
-│  Guest   │     │  VMI Status  │     │  XR Status    │
-│  Agent   │     │              │     │               │
-│          │     │  guestInfo:  │     │  status.atProvider: │
-│  • OS    │     │    running:  │     │    ready: true │
-│  • IPs   │     │    true      │     │    guestInfo:  │
-│  • FS    │     │    os:       │     │      os: {...} │
-│  • Cmds  │     │      name:   │     │      ips: [...]│
-│          │     │        ...   │     │               │
-└──────────┘     └──────────────┘     └───────────────┘
-                       │
-                       ▼
-              ┌────────────────┐
-              │  ArgoCD        │
-              │  Health Check  │
-              │                │
-              │  Ready if:     │
-              │  • VM Running  │
-              │  • Agent.Connected │
-              │  • Guest has IPs │
-              └────────────────┘</div>
+<div class="diagram">
+┌──────────┐     ┌──────────────────┐     ┌─────────────────────┐
+│  VM      │────>│  KubeVirt        │────>│  Crossplane         │
+│  Guest   │     │  VMI Status      │     │  XR Status          │
+│  Agent   │     │                  │     │                     │
+│          │     │  guestInfo:      │     │  status.atProvider: │
+│  • OS    │     │    running: true │     │    ready: true      │
+│  • IPs   │     │    os:           │     │    guestInfo:       │
+│  • FS    │     │      name:       │     │    os: {...}        │
+│  • Cmds  │     │        ...       │     │    ips: [...]       │
+│          │     │                  │     │                     │
+└──────────┘     └──────────────────┘     └─────────────────────┘
+                          │
+                          ▼
+                ┌────────────────────┐
+                │  ArgoCD            │
+                │  Health Check      │
+                │                    │
+                │  Ready if:         │
+                │  • VM Running      │
+                │  • Agent.Connected │
+                │  • Guest has IPs   │
+                └────────────────────┘</div>
 
 <p>Query guest agent status from the command line:</p>
 

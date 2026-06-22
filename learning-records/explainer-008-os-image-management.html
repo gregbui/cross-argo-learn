@@ -188,26 +188,27 @@
 
 <p>In an on-prem OpenShift stack, you need a container image registry that stores both container images (for functions/providers) and VM disk images (for VMs). The pattern uses two registries:</p>
 
-<div class="diagram">┌─────────────────────────────────────────────────────┐
+<div class="diagram">
+┌─────────────────────────────────────────────────────┐
 │                   Your On-Prem Stack                │
 │                                                     │
 │  ┌─────────────────┐    ┌───────────────────────┐   │
-│  │  Container       │    │  VM Disk Image         │   │
-│  │  Registry        │    │  Registry              │   │
-│  │  (Registry CR)   │    │  (Registry CR)         │   │
-│  │                  │    │                        │   │
-│  │  • Functions     │    │  • CentOS Stream 9     │   │
-│  │  • Providers     │    │  • RHEL 9              │   │
-│  │  • Apps          │    │  • Ubuntu 22.04        │   │
-│  │                  │    │  • Windows Server      │   │
+│  │  Container      │    │  VM Disk Image        │   │
+│  │  Registry       │    │  Registry             │   │
+│  │  (Registry CR)  │    │  (Registry CR)        │   │
+│  │                 │    │                       │   │
+│  │  • Functions    │    │  • CentOS Stream 9    │   │
+│  │  • Providers    │    │  • RHEL 9             │   │
+│  │  • Apps         │    │  • Ubuntu 22.04       │   │
+│  │                 │    │  • Windows Server     │   │
 │  └────────┬────────┘    └──────────┬────────────┘   │
-│           │                        │                 │
-│           ▼                        ▼                 │
+│           │                        │                │
+│           ▼                        ▼                │
 │  ┌──────────────────────────────────────────────┐   │
 │  │  Image Build Pipeline (CI/CD)                │   │
 │  │  • Packer / cloud-image-builder              │   │
 │  │  • Trivy / Grype scanning                    │   │
-│  │  • Push to registry                            │   │
+│  │  • Push to registry                          │   │
 │  └──────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────┘</div>
 
@@ -371,7 +372,8 @@ data:
 
 <p>Every image that enters your stack goes through a strict pipeline. No exceptions.</p>
 
-<div class="diagram">┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+<div class="diagram">
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
 │  BUILD   │───>│  SCAN    │───>│  PUSH    │───>│  DEPLOY  │
 │          │    │          │    │          │    │          │
 │ Packer   │    │ Trivy    │    │ Registry │    │ Update   │

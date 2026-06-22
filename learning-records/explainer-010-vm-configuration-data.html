@@ -207,11 +207,12 @@
 
 <p>The composition reads the XR spec and generates a YAML file. cloud-init drops it at the known puppet path. No puppet changes.</p>
 
-<div class="diagram">┌─────────────────────────────────────────────────────┐
+<div class="diagram">
+┌─────────────────────────────────────────────────────┐
 │  XR Spec (Git-tracked)                              │
 │  spec.configData:                                   │
 │    puppet_profile: ["base", "webserver"]            │
-│    app_environment: production                       │
+│    app_environment: production                      │
 │    db_host: db.internal.example.org                 │
 │    features:                                        │
 │      dark_mode: true                                │
