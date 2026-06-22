@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VM Configuration Data: Passing KV Pairs to Linux VMs</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b94e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+  li { margin-bottom: 0.5rem; }
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .callout-label {
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+  .callout.warning { border-left-color: var(--accent-orange); }
+  .callout.warning .callout-label { color: var(--accent-orange); }
+  .callout.danger { border-left-color: var(--accent-red); }
+  .callout.danger .callout-label { color: var(--accent-red); }
+  .callout.success { border-left-color: var(--accent-green); }
+  .callout.success .callout-label { color: var(--accent-green); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: #f0f6fc;
+    font-weight: 600;
+  }
+  td { background: var(--bg); }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .toc h2 {
+    font-size: 1.1rem;
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    border: none;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc li { margin-bottom: 0.25rem; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ -->
+<h1>VM Configuration Data: Passing KV Pairs to Linux VMs</h1>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>You need to pass key-value pairs from your Crossplane composition into the VM at provisioning time — things like puppet profile names, environment variables, application config, feature flags. The question is: what's the most efficient and flexible mechanism?</p>
+
+<p>This explainer compares four approaches, recommends a best practice, and shows how to wire it all together in a Crossplane + KubeVirt stack.</p>
+
+<div class="toc">
+  <h2>Contents</h2>
+  <ul>
+    <li><a href="#problem">1. The Problem</a></li>
+    <li><a href="#options">2. Four Approaches Compared</a></li>
+    <li><a href="#recommended">3. Recommended: cloud-init + Hiera YAML Drop</a></li>
+    <li><a href="#xr-schema">4. XRD Schema for Config Data</a></li>
+    <li><a href="#composition">5. Composition: Generating Config Data</a></li>
+    <li><a href="#cloudinit-inject">6. Injecting into cloud-init</a></li>
+    <li><a href="#puppet-integration">7. Puppet Integration</a></li>
+    <li><a href="#alternative">8. Alternatives: When to Use Something Else</a></li>
+    <li><a href="#troubleshooting">9. Troubleshooting</a></li>
+    <li><a href="#whats-next">10. What's Next</a></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="problem">1. The Problem</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>When a VM boots, it needs configuration data. In a traditional setup, you might use:</p>
+
+<ul>
+  <li>A configuration management tool (puppet, ansible, chef)</li>
+  <li>Environment variables</li>
+  <li>Config files dropped into standard locations</li>
+  <li>An external API the VM polls at boot</li>
+</ul>
+
+<p>In a Crossplane + KubeVirt stack, the data lives in Kubernetes (XR spec, ConfigMaps, Secrets) and needs to get into the VM's filesystem or environment at first boot. The mechanism must be:</p>
+
+<ul>
+  <li><strong>Efficient</strong> — no extra network calls, no polling, no runtime dependency</li>
+  <li><strong>Flexible</strong> — supports nested data, secrets, per-VM overrides</li>
+  <li><strong>Idempotent</strong> — safe to re-run, doesn't break existing VMs</li>
+  <li><strong>Auditable</strong> — data is versioned in Git via the XR</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="options">2. Four Approaches Compared</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<table>
+  <tr>
+    <th>Approach</th>
+    <th>Efficiency</th>
+    <th>Flexibility</th>
+    <th>Complexity</th>
+    <th>Secrets</th>
+    <th>Git-auditable</th>
+  </tr>
+  <tr>
+    <td><strong>1. cloud-init write_files + config drive</strong></td>
+    <td>★★★★★</td>
+    <td>★★★★☆</td>
+    <td>Low</td>
+    <td>Via Secret</td>
+    <td>Yes (XR)</td>
+  </tr>
+  <tr>
+    <td><strong>2. Puppet ENC (external API)</strong></td>
+    <td>★★★☆☆</td>
+    <td>★★★★★</td>
+    <td>High</td>
+    <td>Via API</td>
+    <td>Partial</td>
+  </tr>
+  <tr>
+    <td><strong>3. Environment file (envvars)</strong></td>
+    <td>★★★★☆</td>
+    <td>★★★☆☆</td>
+    <td>Low</td>
+    <td>Via Secret</td>
+    <td>Yes (XR)</td>
+  </tr>
+  <tr>
+    <td><strong>4. Guest agent file push (post-boot)</strong></td>
+    <td>★★☆☆☆</td>
+    <td>★★★★☆</td>
+    <td>Medium</td>
+    <td>Via Secret</td>
+    <td>Yes (XR)</td>
+  </tr>
+</table>
+
+<h3>Approach 1: cloud-init write_files (Recommended)</h3>
+
+<p>Drop config files directly into the VM via cloud-init's <code>write_files</code> directive. The data is embedded in the user-data at provisioning time — zero network calls, instant availability.</p>
+
+<p>Best for: puppet profiles, application configs, feature flags, environment variables. Works with any config management tool.</p>
+
+<h3>Approach 2: Puppet ENC</h3>
+
+<p>Puppet agent queries an external API ( ENC) at boot to get its node classification and variables. The ENC can read from Kubernetes, a database, or any backend.</p>
+
+<p>Best for: large fleets where config changes frequently and you need dynamic classification. Adds an external dependency and latency.</p>
+
+<h3>Approach 3: Environment files</h3>
+
+<p>Drop <code>/etc/default/</code> or <code>/etc/sysconfig/</code> style env files via cloud-init. Simple but limited to flat key=value pairs. No nesting, no complex types.</p>
+
+<p>Best for: simple environment variables, no config management tool involved.</p>
+
+<h3>Approach 4: Guest agent file push</h3>
+
+<p>Push files into the running VM using the QEMU guest agent (<code>virt-copy-in</code>). Happens after the VM is booted.</p>
+
+<p>Best for: post-provisioning config updates, not first-boot. Adds latency and a runtime dependency on the guest agent.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="recommended">3. Recommended: cloud-init + Hiera YAML Drop</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The best approach for a puppet-based stack: <strong>cloud-init write_files that drops a Hiera YAML data file</strong>. Here's why:</p>
+
+<ul>
+  <li><strong>Zero network calls</strong> — data is baked into the VM at boot via cloud-init</li>
+  <li><strong>Nested data support</strong> — YAML supports maps, lists, nested structures</li>
+  <li><strong>Puppet-native</strong> — Hiera is puppet's built-in data lookup system</li>
+  <li><strong>Per-VM overrides</strong> — each VM gets its own Hiera data file</li>
+  <li><strong>Git-auditable</strong> — data lives in the XR spec, tracked in Git</li>
+  <li><strong>Secrets safe</strong> — sensitive values go in K8s Secrets, injected via cloud-init secretRef</li>
+</ul>
+
+<div class="diagram">┌─────────────────────────────────────────────────────┐
+│  XR Spec (Git-tracked)                              │
+│  spec.configData:                                   │
+│    puppet::profile: ["base", "webserver"]           │
+│    app::environment: "production"                   │
+│    app::db_host: "{{ .secretRef.dbHost }}"          │
+│    features:                                        │
+│      dark_mode: true                                │
+│      beta_api: false                                │
+└──────────────────────┬──────────────────────────────┘
+                       │ Composition reads spec
+                       ▼
+              ┌────────────────┐
+              │  Composition   │
+              │  generates:    │
+              │  • ConfigMap   │
+              │  • Secret      │
+              │  • cloud-init  │
+              │    user-data   │
+              └────────┬───────┘
+                       │ Injected into VM
+                       ▼
+              ┌────────────────┐
+              │  VM Boot       │
+              │  cloud-init    │
+              │  write_files:  │
+              │  /etc/puppet   │
+              │  /hieradata/   │
+              │  vm-override   │
+              │  .yaml         │
+              └────────┬───────┘
+                       │ Puppet runs
+                       ▼
+              ┌────────────────┐
+              │  Puppet Agent  │
+              │  reads Hiera   │
+              │  → applies     │
+              │  profiles      │
+              └────────────────┘</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="xr-schema">4. XRD Schema for Config Data</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Define a <code>configData</code> field in your XRD that accepts structured key-value pairs. Use a generic object type so users can pass any nested structure:</p>
+
+<pre><code># xrd/xvirtualmachine.yaml — configData field
+spec:
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                # ── OS-level config (passed via cloud-init) ──
+                configData:
+                  type: object
+                  description: >
+                    Key-value pairs passed to the VM at provisioning time.
+                    Supports nested structures. Mapped to Hiera YAML by
+                    default, but can be used by any config system.
+                  nullable: true
+                  properties:
+                    puppet:
+                      type: object
+                      description: Puppet-specific config
+                      properties:
+                        profile:
+                          type: array
+                          items:
+                            type: string
+                          description: List of puppet profiles to apply
+                        hiera_override:
+                          type: object
+                          description: >
+                            Custom Hiera key-value pairs that override
+                            the global hierarchy.
+                          nullable: true
+                    app:
+                      type: object
+                      description: Application-specific config
+                      nullable: true
+                    env:
+                      type: object
+                      description: >
+                        Flat environment variables. Written to
+                        /etc/default/ or /etc/sysconfig/ files.
+                      nullable: true
+                    features:
+                      type: object
+                      description: Feature flags
+                      nullable: true
+                    custom:
+                      type: object
+                      description: >
+                        Arbitrary key-value pairs. All keys become
+                        YAML files under /etc/vm-config/.
+                      nullable: true
+
+                # ── Secrets (injected via K8s Secret) ──
+                secretData:
+                  type: object
+                  description: >
+                    Sensitive config data. Injected as a K8s Secret
+                    and referenced in cloud-init user-data.
+                  nullable: true
+                  properties:
+                    db_password:
+                      type: string
+                    api_key:
+                      type: string
+                    ssh_private_key:
+                      type: string</code></pre>
+
+<p>Usage example — user creates a VM with config data:</p>
+
+<pre><code># workloads/dev/web-server-03.yaml
+apiVersion: example.org/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: web-server-03
+  namespace: workloads-dev
+spec:
+  parameters:
+    imageTemplate: centos-stream-9
+    hostname: web-server-03
+    cpu: 2
+    memory: 4Gi
+
+    # Config data for puppet and apps
+    configData:
+      puppet:
+        profile:
+          - base
+          - webserver
+          - monitoring
+        hiera_override:
+          environment: production
+          datacenter: dc1
+          rack: r05
+      app:
+        environment: production
+        log_level: info
+        db_host: db.internal.example.org
+        db_port: 5432
+        workers: 4
+      features:
+        dark_mode: true
+        beta_api: false
+        new_dashboard: false
+      env:
+        APP_ENV: production
+        APP_LOG_LEVEL: info
+        APP_WORKERS: "4"
+      custom:
+        nginx::worker_connections: "2048"
+        nginx::keepalive_timeout: "65"
+        redis::maxmemory: "256mb"
+
+    # Sensitive data (goes into K8s Secret)
+    secretData:
+      db_password: "{{ .externalSecret.dbPassword }}"
+      api_key: "{{ .externalSecret.apiKey }}"</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="composition">5. Composition: Generating Config Data</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The composition reads the XR's <code>configData</code> and <code>secretData</code> and generates two resources:</p>
+
+<ol>
+  <li>A <strong>ConfigMap</strong> with the non-sensitive config as YAML files</li>
+  <li>A <strong>Secret</strong> with the sensitive config</li>
+</ol>
+
+<p>Both are referenced by cloud-init user-data.</p>
+
+<h3>5.1 ConfigMap with YAML files</h3>
+
+<p>Use the PatchAndTransform function to generate a ConfigMap where each config section becomes a file:</p>
+
+<pre><code># compositions/xvirtualmachine-pipeline.yaml
+- step: generate-configmap
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+    - apiVersion: pt.fn.crossplane.io/v1
+      kind: Resources
+      resources:
+        - name: vm-configmap
+          base:
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: '{{ .XR.metadata.name }}-config'
+              namespace: '{{ .XR.metadata.namespace }}'
+            data:
+              puppet-hiera.yaml: |
+                # Hiera override data for this VM
+                ---
+                puppet::profile:
+                {{- range .XR.spec.configData.puppet.profile }}
+                  - {{ . | quote }}
+                {{- end }}
+                {{- if .XR.spec.configData.puppet.hiera_override }}
+                {{- range $key, $value := .XR.spec.configData.puppet.hiera_override }}
+                {{ $key }}: {{ $value | toPrettyJson }}
+                {{- end }}
+                {{- end }}
+              app-config.yaml: |
+                ---
+                {{- if .XR.spec.configData.app }}
+                {{ .XR.spec.configData.app | toPrettyJson }}
+                {{- end }}
+              features.yaml: |
+                ---
+                {{- if .XR.spec.configData.features }}
+                {{ .XR.spec.configData.features | toPrettyJson }}
+                {{- end }}
+              envvars: |
+                # Environment variables for this VM
+                # Source this file: source /etc/default/vm-envvars
+                {{- if .XR.spec.configData.env }}
+                {{- range $key, $value := .XR.spec.configData.env }}
+                export {{ $key }}={{ $value | quote }}
+                {{- end }}
+                {{- end }}
+              custom-configs.yaml: |
+                ---
+                {{- if .XR.spec.configData.custom }}
+                {{ .XR.spec.configData.custom | toPrettyJson }}
+                {{- end }}</code></pre>
+
+<h3>5.2 Secret for sensitive data</h3>
+
+<pre><code>        - name: vm-secret
+          base:
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: '{{ .XR.metadata.name }}-secret'
+              namespace: '{{ .XR.metadata.namespace }}'
+            type: Opaque
+            stringData:
+              db_password: '{{ .XR.spec.secretData.db_password | default "" }}'
+              api_key: '{{ .XR.spec.secretData.api_key | default "" }}'
+              ssh_private_key: '{{ .XR.spec.secretData.ssh_private_key | default "" }}'</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="cloudinit-inject">6. Injecting into cloud-init</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The cloud-init user-data reads from the ConfigMap and Secret, then drops files into the VM's filesystem. Here's the full pattern:</p>
+
+<pre><code># cloud-init user-data template (used in composition)
+#cloud-config
+
+hostname: {{ .XR.spec.guest.hostname | default .XR.metadata.name }}
+
+users:
+  - name: cloud-user
+    groups: wheel
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh-authorized-keys:
+    {{- range .XR.spec.guest.linux.sshKeys }}
+      - {{ . }}
+    {{- end }}
+
+# Drop config files into the VM
+write_files:
+  # Puppet Hiera override (per-VM)
+  - path: /etc/puppetlabs/puppet/hieradata/vm-override.yaml
+    content: |
+      ---
+      # Auto-generated by Crossplane — do not edit
+      # Source XR: {{ .XR.metadata.namespace }}/{{ .XR.metadata.name }}
+      # Generated: {{ now | date "2006-01-02T15:04:05Z" }}
+      puppet::profile:
+      {{- range .XR.spec.configData.puppet.profile }}
+        - {{ . | quote }}
+      {{- end }}
+      {{- if .XR.spec.configData.puppet.hiera_override }}
+      {{- range $key, $value := .XR.spec.configData.puppet.hiera_override }}
+      {{ $key }}: {{ $value | toPrettyJson }}
+      {{- end }}
+      {{- end }}
+    permissions: '0644'
+
+  # Application config
+  - path: /etc/vm-config/app-config.yaml
+    content: |
+      ---
+      {{- if .XR.spec.configData.app }}
+      {{ .XR.spec.configData.app | toPrettyJson }}
+      {{- end }}
+    permissions: '0644'
+
+  # Feature flags
+  - path: /etc/vm-config/features.yaml
+    content: |
+      ---
+      {{- if .XR.spec.configData.features }}
+      {{ .XR.spec.configData.features | toPrettyJson }}
+      {{- end }}
+    permissions: '0644'
+
+  # Environment variables
+  - path: /etc/default/vm-envvars
+    content: |
+      # Environment variables — source this file
+      {{- if .XR.spec.configData.env }}
+      {{- range $key, $value := .XR.spec.configData.env }}
+      export {{ $key }}={{ $value | quote }}
+      {{- end }}
+      {{- end }}
+    permissions: '0644'
+
+  # Custom configs (one file per key)
+  {{- if .XR.spec.configData.custom }}
+  {{- range $key, $value := .XR.spec.configData.custom }}
+  - path: /etc/vm-config/custom/{{ $key }}
+    content: |
+      {{ $value | toPrettyJson }}
+    permissions: '0644'
+  {{- end }}
+  {{- end }}
+
+  # Sensitive data (from Secret reference)
+  - path: /etc/vm-config/secrets.env
+    content: |
+      # Sensitive config — read-only for root
+      # Generated by Crossplane
+      {{- if .XR.spec.secretData.db_password }}
+      DB_PASSWORD={{ .XR.spec.secretData.db_password }}
+      {{- end }}
+      {{- if .XR.spec.secretData.api_key }}
+      API_KEY={{ .XR.spec.secretData.api_key }}
+      {{- end }}
+    permissions: '0600'
+
+runcmd:
+  # Enable guest agent
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+
+  # Set ownership on config files
+  - chown -R cloud-user:wheel /etc/vm-config/
+  - chmod -R 0644 /etc/vm-config/
+  - chmod 0600 /etc/vm-config/secrets.env
+
+  # Create a ready marker
+  - echo "ready" > /etc/VM_READY
+
+  # Signal puppet to run (if puppet is installed)
+  - systemctl enable puppet
+  - systemctl start puppet
+
+final_message: "Config data applied to {{ .XR.metadata.name }}"</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="puppet-integration">7. Puppet Integration</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>With the Hiera override file in place, puppet reads it as part of its hierarchy. Here's how to wire it up:</p>
+
+<h3>7.1 Puppet Hiera Configuration</h3>
+
+<pre><code># /etc/puppetlabs/puppet/hiera.yaml (in base image)
+---
+version: 5
+defaults:
+  datadir: hieradata
+  data_backend: yaml
+
+hierarchy:
+  - name: "Per-VM override (Crossplane)"
+    paths:
+      - "vm-override.yaml"
+    data_backend: yaml
+
+  - name: "Environment"
+    paths:
+      - "%{environment}.yaml"
+    data_backend: yaml
+
+  - name: "Common"
+    paths:
+      - "common.yaml"
+    data_backend: yaml
+
+  - name: "Global defaults"
+    paths:
+      - "_common.yaml"
+    data_backend: yaml</code></pre>
+
+<h3>7.2 Puppet Module Usage</h3>
+
+<p>Inside a puppet module, consume the config data via Hiera lookups:</p>
+
+<pre><code># manifests/init.pp
+class vm_config (
+  Array[String] $profile = [],
+  Hash        $app       = {},
+  Hash        $features  = {},
+  Hash        $env       = {},
+) {
+
+  # Profiles from Hiera (set by Crossplane)
+  $profiles = $profile ? {
+    []    => hiera('puppet::profile', ['base']),
+    default => $profile,
+  }
+
+  # Apply profiles
+  include $profiles
+
+  # App config
+  if !empty($app) {
+    file { '/etc/vm-config/app-config.yaml':
+      content => yaml_encode($app),
+      owner   => 'root',
+      group   => 'root',
+      mode    => '0644',
+    }
+  }
+
+  # Feature flags
+  if $features['dark_mode'] {
+    include vm_config::dark_mode
+  }
+  if $features['beta_api'] {
+    include vm_config::beta_api
+  }
+
+  # Environment variables
+  if !empty($env) {
+    file { '/etc/default/vm-envvars':
+      content => join(keys($env), "\n"),
+      owner   => 'root',
+      group   => 'root',
+      mode    => '0644',
+    }
+  }
+}</code></pre>
+
+<h3>7.3 Puppet Hiera Data Files</h3>
+
+<pre><code># hieradata/common.yaml
+---
+puppet::profile:
+  - base
+  - ntp
+  - monitoring
+
+app:
+  environment: development
+  log_level: debug
+
+features:
+  dark_mode: false
+  beta_api: false
+
+# hieradata/production.yaml
+---
+app:
+  environment: production
+  log_level: warn
+  workers: 4
+
+features:
+  dark_mode: true
+  beta_api: false
+
+# hieradata/vm-override.yaml (generated by Crossplane)
+---
+puppet::profile:
+  - base
+  - webserver
+  - monitoring
+app:
+  environment: production
+  db_host: db.internal.example.org
+  db_port: 5432
+  workers: 4
+features:
+  dark_mode: true
+  beta_api: false</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="alternative">8. Alternatives: When to Use Something Else</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Better Approach</th>
+    <th>Why</th>
+  </tr>
+  <tr>
+    <td>Config changes frequently (hourly)</td>
+    <td>Puppet ENC API</td>
+    <td>cloud-init is one-time; ENC is dynamic</td>
+  </tr>
+  <tr>
+    <td>No config management tool</td>
+    <td>Env vars via cloud-init</td>
+    <td>Simpler than Hiera for flat configs</td>
+  </tr>
+  <tr>
+    <td>Need runtime config updates</td>
+    <td>Guest agent file push</td>
+    <td>Push to running VM without reboot</td>
+  </tr>
+  <tr>
+    <td>Large teams, many VMs</td>
+    <td>External secret manager</td>
+    <td>Vault/Sealed Secrets for secret rotation</td>
+  </tr>
+  <tr>
+    <td>Multi-cloud (not just KubeVirt)</td>
+    <td>UserData format standard</td>
+    <td>cloud-init works on AWS, GCP, Azure too</td>
+  </tr>
+</table>
+
+<h3>8.1 Puppet ENC Alternative</h3>
+
+<p>If you need dynamic config (changes without rebuilding VMs), deploy an ENC that reads from Kubernetes:</p>
+
+<pre><code>#!/bin/bash
+# /etc/puppetlabs/puppet/environments/production/manifests/site.pp
+# Uses ENC to classify nodes
+
+node default {
+  # Get node data from Kubernetes API
+  $node_data = inline_template(&lt;&lt;ERB&gt;&gt;
+    <%=
+      require 'open3'
+      stdout, stderr, status = Open3.capture3(
+        "curl -s http://enc-service.vm-config.svc:8080/lookup/#{Facts['networking']['hostname']}"
+      )
+      JSON.parse(stdout)
+    &gt;&gt;
+
+    # Apply profiles from ENC
+    $node_data['puppet::profile'].each |$profile| {
+      include $profile
+    }
+
+    # Set app config
+    include vm_config
+    $app_config = $node_data['app'] || {}
+    $features = $node_data['features'] || {}
+  ERB
+}</code></pre>
+
+<p>This adds a runtime dependency on the ENC service. Use it only if you need config to change without VM recreation.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="troubleshooting">9. Troubleshooting</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<h3>9.1 Config files not appearing in VM</h3>
+
+<pre><code># Check cloud-init status
+oc rsh &lt;vm-debug-pod&gt;
+systemctl status cloud-init
+journalctl -u cloud-init
+
+# Check if write_files succeeded
+ls -la /etc/vm-config/
+ls -la /etc/puppetlabs/puppet/hieradata/vm-override.yaml
+
+# Check cloud-init log for errors
+cat /var/log/cloud-init.log | grep -i error
+cat /var/log/cloud-init-output.log</code></pre>
+
+<h3>9.2 Puppet not picking up Hiera data</h3>
+
+<pre><code># Check Hiera hierarchy
+sudo hiera --debug puppet::profile
+
+# Verify the file exists and is valid YAML
+cat /etc/puppetlabs/puppet/hieradata/vm-override.yaml
+python3 -c "import yaml; yaml.safe_load(open('/etc/puppetlabs/puppet/hieradata/vm-override.yaml'))"
+
+# Check puppet logs
+sudo cat /var/log/puppetlabs/puppet/puppet.log | grep -i hiera</code></pre>
+
+<h3>9.3 Secret values not injected</h3>
+
+<pre><code># Check if the Secret was created
+oc get secret &lt;vm-name&gt;-secret -n workloads-dev -o yaml
+
+# Check if cloud-init user-data references it correctly
+oc get secret &lt;vm-name&gt;-cloudinit-secret -n workloads-dev -o jsonpath='{.data.user-data}' | base64 -d | grep -A5 secrets
+
+# Verify permissions inside VM
+ls -la /etc/vm-config/secrets.env
+stat -c '%a %U %G' /etc/vm-config/secrets.env</code></pre>
+
+<h3>9.4 YAML serialization issues</h3>
+
+<pre><code># If values contain special characters, use toPrettyJson in templates
+# Bad: {{ .XR.spec.configData.env.APP_CMD }}  # breaks on spaces
+# Good: {{ .XR.spec.configData.env.APP_CMD | quote }}  # wraps in quotes
+# Best: {{ .XR.spec.configData.env.APP_CMD | toPrettyJson }}  # full JSON
+
+# Debug by printing the generated user-data
+oc get secret &lt;vm-name&gt;-cloudinit-secret -n workloads-dev -o jsonpath='{.data.user-data}' | base64 -d</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="whats-next">10. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>With config data passing in place, VMs receive their full configuration at boot. The remaining topics:</p>
+
+<ul>
+  <li><strong>Multi-environment rollout</strong> — managing config promotion across dev/staging/prod</li>
+  <li><strong>Secret rotation</strong> — rotating DB passwords and API keys without VM recreation</li>
+  <li><strong>Monitoring & alerting</strong> — tracking config drift, puppet compliance, VM health</li>
+</ul>
+
+</body>
+</html>
