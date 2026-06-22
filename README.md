@@ -48,7 +48,7 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-003-provider-installation.html  # Provider installation on OpenShift
     ├── explainer-004-argocd-bootstrap.html # ArgoCD App-of-Apps bootstrap
     ├── explainer-005-end-to-end-runbooks.html # End-to-end walkthrough, runbooks, task plan
-    └── explainer-006-vm-workload-dev.html  # OS images, cloud-init, guest agents, Windows
+    ├── explainer-006-vm-workload-dev.html  # OS images, cloud-init, guest agents, Windows
 ```
 
 ## Explainers
@@ -144,6 +144,23 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 **Exercise:** Design a guest config schema supporting both Linux and Windows VMs
 
+
+### Explainer 7: XRD & Composition Deep Dive — VM Workloads
+
+**What it covers:**
+- XRD-to-Composition binding: label-based vs. selector-based matching, versioning
+- XRD schema design: required vs. optional fields, OpenAPI v3 validation, composite types
+- Default values via Composition patches (not XRD)
+- Status shape: conditions, endpoint reporting, Ready aggregation
+- Declarative Composition: full VM + DataVolume example with patches and connections
+- Pipeline Composition: full VM + DataVolume with Go-Templating and cloud-init injection
+- Connection patterns: DV name → VM volume reference, connection resolution order
+- ProviderConfig scoping: single, namespace-scoped, XR-referenced
+- Multi-claim XRD design: discriminant field vs. multiple XRDs
+
+**Key concepts:** declarative mode, pipeline mode, connection, FunctionConfig, ProviderConfig, deferred connections
+
+**Exercise:** Design a multi-claim XRD supporting WebServer, Database, and Workstation workload types with a single XRD
 ## Glossary
 
 The canonical terminology is captured in [`GLOSSARY.md`](GLOSSARY.md). Key terms include:
@@ -189,6 +206,7 @@ This workspace is configured for Matt Pocock's engineering skills. The skills re
 | `7cc8e96` | Scaffold teaching workspace: AGENTS.md, GLOSSARY.md, MISSION.md, RESOURCES.md, docs/agents/, initial explainers 1-2 |
 | `34cacd2` | Add explainers 3-5 (provider installation, ArgoCD bootstrap, end-to-end/runbooks), remove redundant exercise answer files |
 | `91ce7d5` | Add explainer 6 (VM workload development), update MISSION.md scope |
+| `???????` | Add explainer 7 (XRD & Composition deep dive for VM workloads), update README.md |
 
 ## Next Steps
 
@@ -198,3 +216,4 @@ Potential additional explainers to expand this workspace:
 - **Monitoring and observability**: VM metrics, alerting, logging
 - **Disaster recovery**: VM backup/restore, snapshot policies
 - **Multi-cluster management**: Crossplane management clusters, remote cluster provisioning
+    └── explainer-007-xrd-composition-vm-deep-dive.html  # XRD & Composition deep dive for VM workloads

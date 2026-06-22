@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XRD & Composition Deep Dive — VM Workloads on Crossplane + KubeVirt</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  h4 {
+    font-size: 0.95rem;
+    color: var(--accent-purple);
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+  p { margin-bottom: 1rem; }
+  ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+  li { margin-bottom: 0.35rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+    color: var(--accent-cyan);
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+    padding: 0.75rem 1rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.green {
+    border-left-color: var(--accent-green);
+    background: rgba(63, 185, 80, 0.06);
+  }
+  .callout.orange {
+    border-left-color: var(--accent-orange);
+    background: rgba(210, 153, 34, 0.06);
+  }
+  .callout.red {
+    border-left-color: var(--accent-red);
+    background: rgba(248, 81, 73, 0.06);
+  }
+  .callout.purple {
+    border-left-color: var(--accent-purple);
+    background: rgba(188, 140, 255, 0.06);
+  }
+  .callout-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+  .tag {
+    display: inline-block;
+    padding: 0.15em 0.5em;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .tag.green { background: rgba(63,185,80,0.15); color: var(--accent-green); }
+  .tag.orange { background: rgba(210,153,34,0.15); color: var(--accent-orange); }
+  .tag.red { background: rgba(248,81,73,0.15); color: var(--accent-red); }
+  .tag.purple { background: rgba(188,140,255,0.15); color: var(--accent-purple); }
+  .tag.cyan { background: rgba(57,210,192,0.15); color: var(--accent-cyan); }
+  .collapsible { margin: 1rem 0; }
+  .collapsible summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--accent);
+    padding: 0.5rem 0;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .collapsible summary::before {
+    content: '▸';
+    display: inline-block;
+    transition: transform 0.2s;
+  }
+  .collapsible[open] summary::before {
+    transform: rotate(90deg);
+  }
+  .collapsible .answer {
+    padding: 0.75rem 0 0.75rem 1.25rem;
+    border-left: 2px solid var(--border);
+    margin-top: 0.5rem;
+  }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem;
+    margin: 1.25rem 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .resource-tree {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .resource-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  .resource-card h4 {
+    margin-top: 0;
+    color: var(--accent);
+  }
+  .comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.25rem 0;
+    font-size: 0.9rem;
+  }
+  .comparison-table th {
+    background: var(--surface);
+    color: var(--accent);
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .comparison-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .comparison-table tr:hover td {
+    background: rgba(88,166,255,0.03);
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+  }
+  .toc h3 {
+    margin-top: 0;
+    color: #f0f6fc;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc li {
+    padding: 0.2rem 0;
+  }
+  .toc a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .toc a:hover {
+    text-decoration: underline;
+  }
+  .toc .sub {
+    padding-left: 1rem;
+    font-size: 0.9em;
+  }
+</style>
+</head>
+<body>
+
+<h1>XRD &amp; Composition Deep Dive — VM Workloads</h1>
+<p><strong>Crossplane + ArgoCD + OpenShift Virtualization</strong> — Explainer 007</p>
+<p>A focused, hands-on guide to designing Composite Resource Definitions and Compositions for KubeVirt VirtualMachine workloads. Builds on Explainer 1 (pipeline) and Explainer 2 (functions) by going deep into the <em>what</em> and <em>why</em> of schema design, resource wiring, and composition patterns.</p>
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ul>
+    <li><a href="#section-1">1. The XRD-to-Composition Relationship</a></li>
+    <li><a href="#section-2">2. XRD Schema Design for VM Workloads</a></li>
+    <li><a href="#section-3">3. Composition Patterns for VMs</a></li>
+    <li><a href="#section-4">4. Declarative Composition: Full VM + DataVolume Example</a></li>
+    <li><a href="#section-5">5. Pipeline Composition: Full VM + DataVolume Example</a></li>
+    <li><a href="#section-6">6. Connection Patterns: Wiring DataVolume to VirtualMachine</a></li>
+    <li><a href="#section-7">7. ProviderConfig and Multi-Tenancy</a></li>
+    <li><a href="#section-8">8. Status Reporting and Conditions</a></li>
+    <li><a href="#section-9">9. Common Pitfalls and Anti-Patterns</a></li>
+    <li><a href="#section-10">10. Exercise: Design a Multi-Claim XRD</a></li>
+  </ul>
+</div>
+
+<!-- ==================================================================== -->
+<section id="section-1">
+<h2>1. The XRD-to-Composition Relationship</h2>
+
+<p>Before diving into schemas and patches, let's be precise about how XRDs and Compositions relate. This is the architecture that everything else builds on.</p>
+
+<div class="diagram">
+┌─────────────┐     ┌────────────────┐     ┌─────────────────┐
+│  User / CI  │────▶│   Claim        │────▶│   XR            │
+│  Git commit │     │ VirtualMachine │     │ XVirtualMachine │
+│             │     │ Claim          │     │ (auto-created)  │
+└─────────────┘     └────────────────┘     └──────┬──────────┘
+                                                  │
+                                                  │ Composition
+                                                  │ crossplane.io/xrd label match
+                                                  ▼
+                                           ┌──────────────────┐
+                                           │ Composition      │
+                                           │ vm-kubevirt      │
+                                           │                  │
+                                           │ Renders:         │
+                                           │ • VirtualMachine │
+                                           │ • DataVolume     │
+                                           │ • PVC            │
+                                           └────────┬─────────┘
+                                                    │
+                                                    │ Provider
+                                                    ▼
+                                            ┌──────────────┐
+                                            │ KubeVirt     │
+                                            │ Provider     │
+                                            │ (controller) │
+                                            └──────┬───────┘
+                                                   │
+                                                   ▼
+                                            ┌──────────────┐
+                                            │ OpenShift    │
+                                            │ (libvirt)    │
+                                            └──────────────┘</div>
+
+<h3>The binding mechanism</h3>
+<p>A Composition is linked to an XRD by the <code>crossplane.io/xrd</code> label on the Composition's <code>metadata</code>:</p>
+<pre><code>metadata:
+  name: vm-kubevirt
+  labels:
+    crossplane.io/xrd: xvirtualmachines.infra.example.com</code></pre>
+<p>Crossplane's <code>composition-controller</code> watches for XRD changes. When it sees an XRD, it scans all Compositions for matching labels. A Composition can also use <code>compositeResourceSelector</code> to match XRs by label instead:</p>
+<pre><code>spec:
+  compositeResourceSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"</code></pre>
+<div class="callout orange">
+  <div class="callout-label">Design choice</div>
+  <strong>Label-based (recommended):</strong> One XRD → many Compositions (e.g., <code>vm-kubevirt</code>, <code>vm-vmware</code>). Flexible but requires the XR to carry the right label.<br>
+  <strong>Direct reference:</strong> XRD's <code>spec.defaultCompositionName</code> pins one Composition. Simpler but no fallback.
+</div>
+
+<h3>Versioning</h3>
+<p>An XRD can declare multiple versions. Each version can have its own Composition:</p>
+<pre><code>spec:
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+  - name: v1beta1
+    served: true
+    referenceable: true</code></pre>
+<p>When a Claim is created, Crossplane creates an XR in the <em>referenceable</em> version. If only <code>v1alpha1</code> is referenceable, all Claims produce <code>XVirtualMachine/v1alpha1</code> XRs regardless of the Claim's API version.</p>
+
+</section>
+
+<!-- ==================================================================== -->
+<section id="section-2">
+<h2>2. XRD Schema Design for VM Workloads</h2>
+
+<p>The XRD schema is the contract between the infrastructure team (who defines it) and the application teams (who fill it in). Good schema design prevents misconfiguration before it happens.</p>
+
+<h3>2.1 Required vs. Optional fields</h3>
+<p>Use <code>required</code> arrays to enforce minimums. For VMs, <code>compute</code> and <code>storage</code> are almost always required:</p>
+<pre><code>spec:
+  properties:
+    compute:
+      type: object
+      required:
+      - vcpus
+      - memory
+      properties:
+        vcpus:
+          type: integer
+          minimum: 1
+          maximum: 64
+        memory:
+          type: string
+          pattern: "^[0-9]+(Mi|Gi|Ti)$"
+    storage:
+      type: object
+      required:
+      - size
+      - image
+      properties:
+        size:
+          type: string
+          pattern: "^[0-9]+(Mi|Gi|Ti)$"
+        image:
+          type: string
+          description: "DataVolume source: http URL, registry path, or PVC name"</code></pre>
+<div class="callout">
+  <div class="callout-label">OpenAPI v3 validation</div>
+  Crossplane uses OpenAPI v3 schema for validation. Use <code>minimum</code>/<code>maximum</code> for numbers, <code>pattern</code> for strings, <code>enum</code> for fixed sets, and <code>minItems</code>/<code>maxItems</code> for arrays. These validate at <em>apply time</em> — before Crossplane even starts reconciling.
+</div>
+
+<h3>2.2 Default values via Composition</h3>
+<p>XRDs cannot declare default values. Instead, the Composition provides them via patches. This is a common source of confusion — the XRD says "this field is optional" and the Composition fills in sensible defaults:</p>
+<pre><code># In the Composition's function config:
+patches:
+- fromFieldPath: "status.availabilityZone"
+  toFieldPath: "spec.template.spec.domain.devices.disks[0].disk"
+  policy:
+    fromFieldPath: optional  # ← If XR doesn't set it, skip the patch</code></pre>
+<p>For fields that always need a default, the Composition's <code>base</code> resource can set them directly — they only get overridden if the XR provides a value.</p>
+
+<h3>2.3 Composite types (grouping related fields)</h3>
+<p>For complex VM specs, group related fields into composite types. This makes the schema self-documenting:</p>
+<pre><code>properties:
+  compute:
+    type: object
+    properties:
+      vcpus: { type: integer }
+      memory: { type: string }
+      gpu:
+        type: object
+        properties:
+          model: { type: string }
+          devices: { type: integer }
+  storage:
+    type: object
+    properties:
+      size: { type: string }
+      storageClass: { type: string }
+      image: { type: string }
+      additionalVolumes:
+        type: array
+        items:
+          type: object
+          properties:
+            name: { type: string }
+            size: { type: string }
+            storageClass: { type: string }
+  network:
+    type: object
+    properties:
+      macAddress: { type: string }
+      interfaces:
+        type: array
+        items:
+          type: object
+          properties:
+            model: { type: string }
+            bridge: { type: object }
+            masquerade: { type: object }
+  lifecycle:
+    type: object
+    properties:
+      running:
+        type: boolean
+        default: true
+      evictionStrategy:
+        type: string
+        enum: [LiveMigrate, External, Halt, Migrate]
+      shutdown:
+        type: object
+        properties:
+          signal:
+            type: string
+            enum: [Ssh, Acpi]</code></pre>
+
+<h3>2.4 Status shape</h3>
+<p>The XRD status declares what Crossplane reports back to the user. For VMs, the most useful status fields are:</p>
+<pre><code>status:
+  type: object
+  properties:
+    conditions:
+      type: array
+      items:
+        type: object
+        properties:
+          type: { type: string }
+          status: { type: string }
+          reason: { type: string }
+          lastTransitionTime: { type: string }
+    endpoint:
+      type: string
+      description: "VM IP address or hostname"
+    ready:
+      type: boolean
+      description: "Whether all managed resources are Ready"</code></pre>
+<p>Crossplane auto-manages the <code>Ready</code> condition based on whether all managed resources report Ready. You can add <em>additional</em> conditions via the Composition.</p>
+
+<h3>2.5 Referenceable versions</h3>
+<p>Setting <code>referenceable: true</code> on a version allows other resources to reference this XR's fields via <code>connections</code>. For VM provisioning chains (e.g., a "VM cluster" XRD that references individual VM XRs), this is essential:</p>
+<pre><code>versions:
+- name: v1alpha1
+  served: true
+  referenceable: true   # ← Allows other XRDs to reference this XR's spec/status</code></pre>
+
+</section>
+
+<!-- ==================================================================== -->
+<section id="section-3">
+<h2>3. Composition Patterns for VMs</h2>
+
+<p>A Composition for VMs typically manages three resource types: <code>VirtualMachine</code>, <code>DataVolume</code>, and optionally <code>PersistentVolumeClaim</code>. The pattern for wiring these together is the core skill.</p>
+
+<h3>3.1 The three managed resource types</h3>
+
+<div class="resource-tree">
+  <div class="resource-card">
+    <h4>DataVolume</h4>
+    <p><code>apiVersion: cdi.kubevirt.io/v1beta1</code></p>
+    <p>Handles disk image lifecycle: download from URL, import from registry, or clone from existing PVC. Creates the backing PVC that the VM boots from.</p>
+    <p><strong>Key fields:</strong> <code>spec.source</code>, <code>spec.pvc</code>, <code>spec.storage</code></p>
+  </div>
+  <div class="resource-card">
+    <h4>VirtualMachine</h4>
+    <p><code>apiVersion: kubevirt.io/v1</code></p>
+    <p>Declares VM compute, storage, and network config. KubeVirt's controller translates this into a running VM via libvirt.</p>
+    <p><strong>Key fields:</strong> <code>spec.running</code>, <code>spec.template.spec.domain</code>, <code>spec.template.spec.volumes</code></p>
+  </div>
+  <div class="resource-card">
+    <h4>PersistentVolumeClaim</h4>
+    <p><code>apiVersion: v1</code></p>
+    <p>Optional — the DataVolume usually creates its own PVC. Use explicit PVCs for additional disks beyond the boot disk.</p>
+    <p><strong>Key fields:</strong> <code>spec.accessModes</code>, <code>spec.resources.requests.storage</code>, <code>spec.storageClassName</code></p>
+  </div>
+  <div class="resource-card">
+    <h4>ProviderConfig</h4>
+    <p><code>apiVersion: kubevirt.crossplane.io/v1alpha1</code></p>
+    <p>Not a managed resource — it's the credential/config that tells the KubeVirt provider how to reach the OpenShift API.</p>
+    <p><strong>Key fields:</strong> <code>spec.credentials</code>, <code>spec.serviceAccountName</code></p>
+  </div>
+</div>
+
+<h3>3.2 Declarative vs. Pipeline mode</h3>
+<p>For VM workloads, both modes work. The choice depends on complexity:</p>
+
+<table class="comparison-table">
+  <thead>
+    <tr><th>Criteria</th><th>Declarative</th><th>Pipeline</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Best for</td>
+      <td>Simple VMs (fixed image, single disk, standard networking)</td>
+      <td>Complex VMs (conditional configs, cloud-init, multiple disks)</td>
+    </tr>
+    <tr>
+      <td>Number of managed resources</td>
+      <td>Up to ~10</td>
+      <td>Unlimited (loop via Go-Templating)</td>
+    </tr>
+    <tr>
+      <td>Conditional logic</td>
+      <td>Limited (policy-based, enum transforms)</td>
+      <td>Full (Go templates: if/else, ranges, Sprig functions)</td>
+    </tr>
+    <tr>
+      <td>DataVolume injection</td>
+      <td>Connection from DV name to VM volume</td>
+      <td>Template renders both DV and VM, patches link them</td>
+    </tr>
+    <tr>
+      <td>Learning curve</td>
+      <td>Lower — pure YAML patches</td>
+      <td>Higher — need to understand function pipeline</td>
+    </tr>
+    <tr>
+      <td>Maintenance</td>
+      <td>Changes require Composition re-sync</td>
+      <td>Functions can be updated independently</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout green">
+  <div class="callout-label">Recommendation for this stack</div>
+  Start with <strong>declarative mode</strong> for simple VMs. Move to <strong>pipeline mode</strong> when you need cloud-init injection, conditional eviction strategies, or dynamic disk provisioning. Most production VM stacks end up using both — declarative for standard workloads, pipeline for custom ones.
+</div>
+
+<h3>3.3 The composition rendering flow</h3>
+<p>Regardless of mode, the rendering flow is the same:</p>
+<pre><code>1. Crossplane receives an XR (or sees a Claim → creates XR)
+2. Finds the matching Composition (by label or selector)
+3. Renders the Composition:
+   a. For each resource in the Composition, create a Managed Resource template
+   b. Apply patches: map XR spec fields → managed resource spec fields
+   c. Apply connections: pass outputs from one managed resource → another
+   d. Apply function pipeline steps (if pipeline mode)
+4. Apply all rendered managed resources to the cluster
+5. The KubeVirt provider reconciles each managed resource against the KubeVirt API
+6. Status flows back: KubeVirt → Provider → Composition → XR → Claim</code></pre>
+
+</section>
+
+<!-- ==================================================================== -->
+<section id="section-4">
+<h2>4. Declarative Composition: Full VM + DataVolume Example</h2>
+
+<p>This is the simplest working Composition. It creates a DataVolume (to download an OS image) and a VirtualMachine (to run it), wired together via a <code>connection</code>.</p>
+
+<h3>4.1 The Composition</h3>
+<pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: vm-kubevirt-declarative
+  labels:
+    crossplane.io/xrd: xvirtualmachines.infra.example.com
+    infra.example.com/composition-style: declarative
+spec:
+  compositeResourceSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+  resources:
+  # ── Resource 1: DataVolume (disk image) ──
+  - name: datavolume
+    base:
+      apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataVolume
+      metadata:
+        labels:
+          infra.example.com/managed-by: crossplane
+      spec:
+        storage: {}  # Will be patched from XR spec
+        source: {}   # Will be patched from XR spec
+    patches:
+    # Map XR storage.size → DV storage request
+    - fromFieldPath: "storage.size"
+      toFieldPath: "spec.storage.resources.requests.storage"
+    # Map XR storage.image → DV source URL
+    - fromFieldPath: "storage.image"
+      toFieldPath: "spec.source.http.url"
+      transforms:
+      - type: string
+        string:
+          fmt: "https://example.com/images/%s"
+          # Only if image doesn't already start with http/https
+    # Map XR storage.storageClass → DV storage class
+    - fromFieldPath: "storage.storageClass"
+      toFieldPath: "spec.storage.storageClassName"
+    # Set the DV name to include the XR name for traceability
+    - fromFieldPath: "metadata.name"
+      toFieldPath: "metadata.generateName"
+      transforms:
+      - type: string
+        string:
+          fmt: "vm-%s-"
+
+  # ── Resource 2: VirtualMachine ──
+  - name: virtualmachine
+    base:
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        labels:
+          infra.example.com/managed-by: crossplane
+      spec:
+        running: true
+        template:
+          spec:
+            domain:
+              devices:
+                disks:
+                - name: disk0
+                  disk:
+                    bus: virtio
+              evictionStrategy: LiveMigrate
+            networks:
+            - name: default-network
+              pod: {}
+            terminationGracePeriodSeconds: 30
+            volumes:
+            - name: disk0
+              dataVolume:
+                name: placeholder-dv
+    patches:
+    # Map XR compute.vcpus → VM vCPUs
+    - fromFieldPath: "compute.vcpus"
+      toFieldPath: "spec.template.spec.domain.cpu.cores"
+    # Map XR compute.memory → VM memory
+    - fromFieldPath: "compute.memory"
+      toFieldPath: "spec.template.spec.domain.resources.requests.memory"
+    # Conditional: if XR sets evictionStrategy, use it
+    - fromFieldPath: "lifecycle.evictionStrategy"
+      toFieldPath: "spec.template.spec.domain.evictionStrategy"
+      policy:
+        fromFieldPath: optional
+    # Connection: pass DV name into VM volume reference
+    - fromFieldPath: "metadata.name"
+      toFieldPath: "spec.template.spec.volumes[0].dataVolume.name"
+      connections:
+      - fromResource: datavolume
+        toFieldPath: metadata.name
+        transforms:
+        - type: string
+          string:
+            fmt: "vm-%s-"
+    # Connection: set running from XR
+    - fromFieldPath: "lifecycle.running"
+      toFieldPath: "spec.running"
+      policy:
+        fromFieldPath: optional
+    # Connection: set VM metadata name to XR name
+    - fromFieldPath: "metadata.name"
+      toFieldPath: "metadata.generateName"
+      transforms:
+      - type: string
+        string:
+          fmt: "vm-%s-"</code></pre>
+
+<h3>4.2 How the connection works</h3>
+<p>The tricky part of VM compositions is wiring the DataVolume name into the VirtualMachine's volume reference. Here's the flow:</p>
+<pre><code>XR metadata.name = "my-web-server"
+         │
+         ▼
+DataVolume metadata.generateName = "vm-my-web-server-"
+         │
+         │ Crossplane resolves this to "vm-my-web-server-abc12"
+         │
+         ▼
+VirtualMachine spec.template.spec.volumes[0].dataVolume.name
+    = "vm-my-web-server-abc12"   ← resolved from DV's actual name</code></pre>
+<div class="callout orange">
+  <div class="callout-label">Timing caveat</div>
+  Crossplane renders all managed resources in a single pass. The DataVolume and VirtualMachine are created simultaneously. The DV will be in <code>Pending</code> state while it downloads the image, and the VM will be created but not yet running until the DV becomes <code>Succeeded</code>. KubeVirt handles this — it waits for the backing PVC before booting.
+</div>
+
+<h3>4.3 The resulting Claim</h3>
+<p>With the XRD and Composition in place, a user creates a simple Claim:</p>
+<pre><code>apiVersion: infra.example.com/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: web-server-1
+  namespace: default
+  labels:
+    infra.example.com/kubevirt: "true"
+spec:
+  compute:
+    vcpus: 2
+    memory: "4Gi"
+  storage:
+    size: "50Gi"
+    storageClass: ocs.external.ceph.rook.io
+    image: "centos-stream-9.qcow2"
+  network: {}
+  lifecycle:
+    running: true
+    evictionStrategy: LiveMigrate</code></pre>
+<p>Crossplane creates an <code>XVirtualMachine/web-server-1</code> XR, the Composition renders a DataVolume and VirtualMachine, and KubeVirt provisions the VM. Done in ~3 minutes (mostly image download time).</p>
+
+</section>
+
+<!-- ==================================================================== -->
+<section id="section-5">
+<h2>5. Pipeline Composition: Full VM + DataVolume Example</h2>
+
+<p>Pipeline mode gives you imperative logic. This is where you'd go for cloud-init injection, conditional resource creation, or dynamic disk provisioning.</p>
+
+<h3>5.1 Pipeline structure</h3>
+<pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: vm-kubevirt-pipeline
+  labels:
+    crossplane.io/xrd: xvirtualmachines.infra.example.com
+    infra.example.com/composition-style: pipeline
+spec:
+  compositeResourceSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+  mode: Pipeline
+  pipeline:
+  # ── Step 1: Render base VM template ──
+  - step: render-vm-template
+    functionRef:
+      name: crossplane-function-go-templating
+    inputs:
+      resources:
+      - name: vm
+        base:
+          apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+          metadata:
+            labels:
+              infra.example.com/managed-by: crossplane
+          spec:
+            running: true
+            template:
+              spec:
+                domain:
+                  cpu:
+                    cores: 1
+                  devices:
+                    disks:
+                    - name: bootdisk
+                      disk:
+                        bus: virtio
+                    # Additional disks injected by later steps
+                  evictionStrategy: LiveMigrate
+                networks:
+                - name: default-network
+                  pod: {}
+                terminationGracePeriodSeconds: 30
+                volumes:
+                - name: bootdisk
+                  dataVolume:
+                    name: ""
+                # Guest agent and cloud-init injected here
+        desired:
+          apiVersion: crossplane.io/v1alpha1
+          kind: ResourceList
+          resources:
+          - name: vm
+            ref:
+              name: vm
+            path: /
+      - name: providerconfig
+        base:
+          apiVersion: kubevirt.crossplane.io/v1alpha1
+          kind: ProviderConfig
+          spec:
+            credentialSource:
+              serviceAccount: crossplane-kubevirt-provider
+
+  # ── Step 2: Patch VM fields from XR spec ──
+  - step: patch-vm-spec
+    functionRef:
+      name: crossplane-function-patch-and-transform
+    inputs:
+      functionConfigRef:
+        name: vm-patch-config
+      resources:
+      - name: vm
+        patches:
+        - fromFieldPath: "compute.vcpus"
+          toFieldPath: "spec.template.spec.domain.cpu.cores"
+        - fromFieldPath: "compute.memory"
+          toFieldPath: "spec.template.spec.domain.resources.requests.memory"
+        - fromFieldPath: "lifecycle.evictionStrategy"
+          toFieldPath: "spec.template.spec.domain.evictionStrategy"
+          policy:
+            fromFieldPath: optional
+
+  # ── Step 3: Render DataVolume ──
+  - step: render-datavolume
+    functionRef:
+      name: crossplane-function-go-templating
+    inputs:
+      resources:
+      - name: dv
+        base:
+          apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
+            labels:
+              infra.example.com/managed-by: crossplane
+          spec:
+            storage: {}
+            source: {}
+        desired:
+          apiVersion: crossplane.io/v1alpha1
+          kind: ResourceList
+          resources:
+          - name: dv
+            ref:
+              name: dv
+            path: /
+      - name: vm
+        base:
+          apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+
+  # ── Step 4: Patch DataVolume from XR spec ──
+  - step: patch-dv-spec
+    functionRef:
+      name: crossplane-function-patch-and-transform
+    inputs:
+      functionConfigRef:
+        name: dv-patch-config
+      resources:
+      - name: dv
+        patches:
+        - fromFieldPath: "storage.size"
+          toFieldPath: "spec.storage.resources.requests.storage"
+        - fromFieldPath: "storage.storageClass"
+          toFieldPath: "spec.storage.storageClassName"
+        - fromFieldPath: "storage.image"
+          toFieldPath: "spec.source.http.url"
+
+  # ── Step 5: Link DV to VM ──
+  - step: link-dv-to-vm
+    functionRef:
+      name: crossplane-function-patch-and-transform
+    inputs:
+      functionConfigRef:
+        name: vm-dv-link-config
+      resources:
+      - name: vm
+        patches:
+        - fromFieldPath: "status.atProvider.name"
+          toFieldPath: "spec.template.spec.volumes[0].dataVolume.name"
+          connections:
+          - fromPath: status.atProvider.name
+            fromResource: dv
+
+  # ── Step 6: Apply cloud-init if specified ──
+  - step: inject-cloudinit
+    functionRef:
+      name: crossplane-function-go-templating
+    inputs:
+      resources:
+      - name: vm
+        base:
+          apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+        desired:
+          apiVersion: crossplane.io/v1alpha1
+          kind: ResourceList
+          resources:
+          - name: vm
+            ref:
+              name: vm
+            path: /spec/template/spec/volumes
+          - name: cloudinit-dv
+            ref:
+              name: cloudinit-dv
+            path: /
+            remove: true  # Only keep if cloud-init is defined</code></pre>
+
+<h3>5.2 Patch-and-Transform function configs</h3>
+<p>Each Patch-and-Transform step references a <code>FunctionConfig</code> that holds the patch definitions:</p>
+<pre><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vm-patch-config
+data:
+  function.crossplane.io/resource-patches: |
+    - fromFieldPath: "compute.vcpus"
+      toFieldPath: "spec.template.spec.domain.cpu.cores"
+    - fromFieldPath: "compute.memory"
+      toFieldPath: "spec.template.spec.domain.resources.requests.memory"</code></pre>
+<div class="callout">
+  <div class="callout-label">Why separate FunctionConfigs?</div>
+  Storing patches in ConfigMaps means you can update patch logic without touching the Composition. ArgoCD can sync FunctionConfigs independently, enabling gradual rollout of patch changes.
+</div>
+
+<h3>5.3 Go-Templating for cloud-init</h3>
+<p>The most powerful VM-specific use case for Go-Templating is injecting cloud-init user-data:</p>
+<pre><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudinit-function-config
+data:
+  function.crossplane.io/resources: |
+    - name: vm
+      base:
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+      desired:
+        apiVersion: crossplane.io/v1alpha1
+        kind: ResourceList
+        resources:
+        - ref:
+            name: vm
+          path: /
+        - name: cloudinit-dv
+          ref:
+            name: cloudinit-dv
+          path: /
+          remove: true
+---
+  # In the Go template:
+  {{- if .resources.XVirtualMachine.claim.spec.cloudInit }}
+  {{- $userData := .resources.XVirtualMachine.claim.spec.cloudInit.userData }}
+  {{- $dvName := printf "%s-cloudinit" (include "crossplane.metadata.name" .resources.XVirtualMachine.claim) }}
+  - name: cloudinit-dv
+    apiVersion: cdi.kubevirt.io/v1beta1
+    kind: DataVolume
+    metadata:
+      name: {{ $dvName }}
+    spec:
+      pvc:
+        name: {{ $dvName }}
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 100Mi
+      source:
+        http:
+          url: data:text/plain;base64,{{ $userData | b64enc }}
+  - ref:
+      name: vm
+    patches:
+    - path: spec.template.spec.volumes
+      valueFrom:
+        insertAfter:
+          name: bootdisk
+          dataVolume:
+            name: {{ $dvName }}
+    - path: spec.template.spec.domain.devices.disks
+      valueFrom:
+        insertAfter:
+          name: bootdisk
+          disk:
+            bus: virtio
+          name: cloudinitdisk
+          disk:
+            cdrom:
+              bus: sata
+          name: cloudinitdisk</code></pre>
+
+</section>
+
+<!-- ==================================================================== -->
+<section id="section-6">
+<h2>6. Connection Patterns: Wiring DataVolume to VirtualMachine</h2>
+
+<p>Connections are how Crossplane passes data between managed resources. For VMs, the most critical connection is wiring the DataVolume's name (and later its PVC) into the VirtualMachine's volume specification.</p>
+
+<h3>6.1 Declarative connections</h3>
+<p>In declarative mode, connections are declared inline on the patch:</p>
+<pre><code>- fromFieldPath: "spec.template.spec.volumes[0].dataVolume.name"
+  connections:
+  - fromPath: metadata.name
+    fromResource: datavolume</code></pre>
+<p>This tells Crossplane: "After the DataVolume is created, read its <code>metadata.name</code> and write it into the VM's volume reference."</p>
+
+<h3>6.2 Pipeline connections</h3>
+<p>In pipeline mode, connections are declared in the FunctionConfig:</p>
+<pre><code>patches:
+- fromFieldPath: "spec.template.spec.volumes[0].dataVolume.name"
+  connections:
+  - fromPath: status.atProvider.name
+    fromResource: dv</code></pre>
+<p>Using <code>status.atProvider.name</code> (the provider's reported name) is more reliable than <code>metadata.name</code> because it reflects the actual reconciled state.</p>
+
+<h3>6.3 Connection patterns reference</h3>
+
+<table class="comparison-table">
+  <thead>
+    <tr><th>Pattern</th><th>From</th><th>To</th><th>When to use</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>DV → VM name</td>
+      <td>DV <code>metadata.name</code></td>
+      <td>VM <code>volumes[].dataVolume.name</code></td>
+      <td>Always — VM needs to know which DV to boot from</td>
+    </tr>
+    <tr>
+      <td>VM → XR status</td>
+      <td>VM <code>status.printableStatus</code></td>
+      <td>XR <code>status.endpoint</code></td>
+      <td>Report VM running/stopped state back to user</td>
+    </tr>
+    <tr>
+      <td>ProviderConfig ref</td>
+      <td>XR <code>spec.providerConfigName</code></td>
+      <td>Managed resource <code>spec.providerConfigRef.name</code></td>
+      <td>Multi-tenant setups with different auth per namespace</td>
+    </tr>
+    <tr>
+      <td>XR → all resources</td>
+      <td>XR <code>metadata.name</code></td>
+      <td>All managed resource <code>metadata.labels</code></td>
+      <td>Traceability — label all resources with XR name</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>6.4 The connection resolution order</h3>
+<pre><code>1. Crossplane renders all managed resource templates (base + patches)
+2. For each connection:
+   a. Read the source field from the source managed resource
+   b. If the source field is not yet available (resource not Ready),
+      defer the connection until the next reconciliation
+   c. Write the value to the target field on the target managed resource
+3. Apply all managed resources to the cluster
+4. On next reconciliation:
+   a. Read actual status from the KubeVirt provider
+   b. Resolve any deferred connections
+   c. Re-apply managed resources if connection values changed</code></pre>
+<div class="callout orange">
+  <div class="callout-label">Deferred connections</div>
+  If a connection source field isn't available yet (e.g., the DV hasn't been created), Crossplane defers the connection and retries on the next reconciliation cycle (default ~1 minute). This is why VM provisioning takes a few minutes — the DV must become Ready before the VM can reference it.
+</div>
+
+</section>
+
+<!-- ==================================================================== -->
+<section id="section-7">
+<h2>7. ProviderConfig and Multi-Tenancy</h2>
+
+<p>ProviderConfig is how the KubeVirt provider knows how to talk to OpenShift. Its placement and scoping have important design implications.</p>
+
+<h3>7.1 ProviderConfig structure</h3>
+<pre><code>apiVersion: kubevirt.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      name: kubevirt-provider-credentials
+      namespace: crossplane-system
+      key: credentials
+  # OR for in-cluster auth:
+  serviceAccountName: crossplane-kubevirt-provider</code></pre>
+
+<h3>7.2 Scoping strategies</h3>
+
+<table class="comparison-table">
+  <thead>
+    <tr><th>Strategy</th><th>Scope</th><th>Use case</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Single ProviderConfig</td>
+      <td>Cluster-wide (name: "default")</td>
+      <td>Single team, single OpenShift cluster</td>
+    </tr>
+    <tr>
+      <td>Namespace-scoped</td>
+      <td>One per namespace (dev, staging, prod)</td>
+      <td>Separate auth per environment</td>
+    </tr>
+    <tr>
+      <td>XR-referenced</td>
+      <td>Each XR specifies <code>spec.providerConfigRef.name</code></td>
+      <td>Mixing providers (KubeVirt + VMware on same cluster)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>7.3 In-cluster vs. external auth</h3>
+<pre><code># In-cluster (recommended for OpenShift):
+# The provider uses the Crossplane pod's ServiceAccount
+# to authenticate to the OpenShift API server.
+# No secrets needed — OpenShift RBAC handles authorization.
+
+# External (for remote clusters):
+# ProviderConfig holds a kubeconfig or token.
+# Useful if Crossplane runs on a different cluster
+# than the one running KubeVirt.</code></pre>
+<div class="callout green">
+  <div class="callout-label">OpenShift recommendation</div>
+  Use <strong>in-cluster auth</strong> with a ServiceAccount. The KubeVirt provider pod runs in <code>crossplane-system</code> and uses its SA to authenticate to OpenShift. Grant the SA permissions via a ClusterRole/ClusterRoleBinding that allows <code>get</code>/<code>list</code>/<code>create</code>/<code>update</code>/<code>patch</code> on <code>virtualmachines</code>, <code>datavolumes</code>, and <code>persistentvolumeclaims</code> in the target namespaces.
+</div>
+
+</section>
+
+<!-- ==================================================================== -->
+<section id="section-8">
+<h2>8. Status Reporting and Conditions</h2>
+
+<p>Status reporting is how Crossplane tells the user what's happening. For VM workloads, meaningful status is critical for debugging and monitoring.</p>
+
+<h3>8.1 Auto-managed conditions</h3>
+<p>Crossplane automatically manages the <code>Ready</code> condition based on managed resource status:</p>
+<pre><code>status:
+  conditions:
+  - type: Ready
+    status: True    # All managed resources are Ready
+    reason: CompositeReady
+  - type: Synced
+    status: True
+    reason: Synced</code></pre>
+
+<h3>8.2 Custom conditions from the Composition</h3>
+<p>You can add custom conditions via the Composition. For VMs, useful custom conditions include:</p>
+<pre><code># In the Composition's pipeline step:
+- step: report-vm-status
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+    functionConfigRef:
+      name: vm-status-config
+    resources:
+    - name: xr
+      patches:
+      # Report VM's running state
+      - fromFieldPath: "resources.virtualmachine.status.conditions[0].status"
+        toFieldPath: "status.conditions[?type=='VMRunning'].status"
+      # Report DataVolume's download progress
+      - fromFieldPath: "resources.datavolume.status.phase"
+        toFieldPath: "status.conditions[?type=='DiskReady'].reason"</code></pre>
+
+<h3>8.3 Status fields to expose</h3>
+<p>For VM workloads, the most useful status fields to report back:</p>
+<ul>
+  <li><code>status.endpoint</code> — VM IP address (from KubeVirt's <code>status.interfaces</code>)</li>
+  <li><code>status.conditions[?type=='VMRunning'].status</code> — Running, Stopped, or Paused</li>
+  <li><code>status.conditions[?type=='DiskReady'].reason</code> — Succeeded, Pending, or CreateError</li>
+  <li><code>status.ready</code> — Crossplane's auto-managed aggregate</li>
+</ul>
+
+</section>
+
+<!-- ==================================================================== -->
+<section id="section-9">
+<h2>9. Common Pitfalls and Anti-Patterns</h2>
+
+<h3>9.1 XRD immutability</h3>
+<p><span class="tag red">Critical</span></p>
+<p>Once an XRD is created, its <code>spec.versions[].schema</code> is <strong>immutable</strong>. You cannot change the schema of an existing version. To modify the schema:</p>
+<ol>
+  <li>Create a new version (e.g., <code>v1beta1</code>)</li>
+  <li>Update the Composition to support both versions</li>
+  <li>Migration: users create Claims in the new version</li>
+  <li>Old Claims continue using the old version until manually migrated</li>
+</ol>
+<div class="callout red">
+  <div class="callout-label">Don't do this</div>
+  Editing an XRD's schema after XRs or Claims exist will cause reconciliation failures. Always plan your schema evolution before the first Claim is created.
+</div>
+
+<h3>9.2 KubeVirt field immutability</h3>
+<p><span class="tag orange">Important</span></p>
+<p>Many KubeVirt fields are immutable after the VM is created. Notably:</p>
+<ul>
+  <li><code>spec.template.spec.domain.devices.disks</code> — cannot add/remove disks</li>
+  <li><code>spec.template.spec.domain.cpu</code> — cannot change vCPU topology</li>
+  <li><code>spec.template.spec.volumes</code> — cannot change volume names</li>
+</ul>
+<p>If the XR spec changes these fields, Crossplane will patch the VirtualMachine, but KubeVirt will reject the patch. The XR will show a <code>ReconcileError</code> condition.</p>
+<div class="callout orange">
+  <div class="callout-label">Mitigation</div>
+  Mark KubeVirt-immutable fields as <code>immutable: true</code> in the XRD schema. This catches the error at Claim apply time rather than at reconciliation time.
+</div>
+
+<h3>9.3 DataVolume timing races</h3>
+<p><span class="tag orange">Important</span></p>
+<p>If the DataVolume takes a long time to download an image (large ISO files), the VirtualMachine will be created but remain in <code>Stopped</code> state waiting for the DV to complete. This is normal, but can confuse monitoring.</p>
+<p>Mitigation: Set <code>spec.running: false</code> in the Composition's base VM template, and use a patch to set <code>running: true</code> only after the DV is Ready. Or, use the <code>spec.waitForFirstConsumer</code> storage class.</p>
+
+<h3>9.4 Overly broad ProviderConfig permissions</h3>
+<p><span class="tag red">Critical</span></p>
+<p>Granting the provider SA <code>*/*</code> permissions is a common shortcut that becomes a security risk. The minimum permissions for the KubeVirt provider:</p>
+<pre><code>resources:
+- virtualmachines
+- virtualmachineinstances
+- datavolumes
+- persistentvolumeclaims
+verbs:
+- get
+- list
+- watch
+- create
+- update
+- patch
+- delete</code></pre>
+
+<h3>9.5 Using ArgoCD self-heal on Crossplane-managed resources</h3>
+<p><span class="tag red">Critical</span></p>
+<p>Never set ArgoCD's <code>syncPolicy.autoSync</code> on namespaces managed by Crossplane. ArgoCD will try to revert Crossplane's patches, and Crossplane will re-apply them, creating a sync loop.</p>
+<p>ArgoCD should only manage: XRDs, Compositions, ProviderConfigs, ProviderConfigs, and Claims. It should <strong>ignore</strong> the managed resources that Crossplane creates (VirtualMachine, DataVolume, PVC).</p>
+
+</section>
+
+<!-- ==================================================================== -->
+<section id="section-10">
+<h2>10. Exercise: Design a Multi-Claim XRD</h2>
+
+<p>Design an XRD that supports three distinct claim types for the same underlying infrastructure:</p>
+<ul>
+  <li><strong>WebServer</strong> — 2 vCPUs, 4Gi RAM, 50Gi disk, public networking</li>
+  <li><strong>Database</strong> — 4 vCPUs, 16Gi RAM, 200Gi disk, private networking, SSD storage</li>
+  <li><strong>Workstation</strong> — 8 vCPUs, 32Gi RAM, 500Gi disk, GPU, public + private networking</li>
+</ul>
+<p>Requirements:</p>
+<ol>
+  <li>All three claim types share the same underlying <code>XVirtualMachine</code></li>
+  <li>Each claim type has different required fields</li>
+  <li>The Composition must handle all three types</li>
+</ol>
+
+<div class="collapsible">
+  <summary>Click to reveal the answer</summary>
+  <div class="answer">
+    <h4>Approach: Single XRD with discriminant field</h4>
+    <p>Use a <code>workloadType</code> field in the spec as a discriminant. The Composition uses this to branch its patch logic.</p>
+
+    <pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xvirtualmachines.infra.example.com
+spec:
+  group: infra.example.com
+  names:
+    kind: XVirtualMachine
+    plural: xvirtualmachines
+  claimNames:
+    kind: VirtualMachineClaim
+    plural: virtualmachineclaims
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required:
+            - workloadType
+            - compute
+            - storage
+            properties:
+              workloadType:
+                type: string
+                enum: [WebServer, Database, Workstation]
+              compute:
+                type: object
+                properties:
+                  vcpus:
+                    type: integer
+                    minimum: 1
+                    maximum: 64
+                  memory:
+                    type: string
+                  gpu:
+                    type: object
+                    properties:
+                      model: { type: string }
+                      devices: { type: integer }
+                # WebServer: no GPU
+                # Database: no GPU
+                # Workstation: GPU required
+              storage:
+                type: object
+                properties:
+                  size: { type: string }
+                  storageClass: { type: string }
+                  image: { type: string }
+                # WebServer: standard storage class
+                # Database: SSD class required
+                # Workstation: high-performance class
+              network:
+                type: object
+                properties:
+                  public: { type: boolean }
+                  private: { type: boolean }
+                  macAddress: { type: string }
+                # WebServer: public=true, private=false
+                # Database: public=false, private=true
+                # Workstation: public=true, private=true
+              lifecycle:
+                type: object
+                properties:
+                  running: { type: boolean }
+                  evictionStrategy:
+                    type: string
+                    enum: [LiveMigrate, External, Halt, Migrate]
+                  shutdown:
+                    type: object
+                    properties:
+                      signal: { type: string }</code></pre>
+
+    <h4>Composition strategy</h4>
+    <p>Use <strong>pipeline mode with Go-Templating</strong> because the Composition needs conditional logic based on <code>workloadType</code>:</p>
+    <pre><code># In the Go-Templating function:
+{{- if eq .resources.XVirtualMachine.claim.spec.workloadType "Database" }}
+  # Use SSD storage class
+  # Set higher default vCPUs
+  # Disable public networking
+  # Add read-only replica volumes
+{{- else if eq .resources.XVirtualMachine.claim.spec.workloadType "Workstation" }}
+  # Add GPU device
+  # Enable both public and private networking
+  # Set higher memory defaults
+{{- else }}
+  # WebServer: standard config
+  # Enable public networking
+  # Standard storage class
+{{- end }}</code></pre>
+
+    <h4>Alternative: Multiple XRDs</h4>
+    <p>Instead of one XRD with a discriminant, you could create three separate XRDs:</p>
+    <ul>
+      <li><code>XWebServer</code> — with <code>WebServerClaim</code></li>
+      <li><code>XDatabase</code> — with <code>DatabaseClaim</code></li>
+      <li><code>XWorkstation</code> — with <code>WorkstationClaim</code></li>
+    </ul>
+    <p>Each XRD has its own tightly-scoped schema. Each has its own Composition with no conditionals. More XRDs to maintain, but each is simpler and easier to validate.</p>
+    <div class="callout">
+      <div class="callout-label">Tradeoff</div>
+      Single XRD = fewer CRDs, more conditional logic in Composition.<br>
+      Multiple XRDs = more CRDs, simpler Compositions, better per-type validation.
+    </div>
+  </div>
+</div>
+
+</section>
+
+</body>
+</html>
