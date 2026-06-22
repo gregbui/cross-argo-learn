@@ -49,13 +49,16 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-004-argocd-bootstrap.html # ArgoCD App-of-Apps bootstrap
     ├── explainer-005-end-to-end-runbooks.html # End-to-end walkthrough, runbooks, task plan
     ├── explainer-006-vm-workload-dev.html  # OS images, cloud-init, guest agents, Windows
+    ├── explainer-008-os-image-management.html    # OS image management: build, scan, push, update strategies
+    ├── explainer-009-cloud-init-and-guest-agent.html  # Cloud-init provisioning and guest agent integration
+    ├── explainer-010-vm-configuration-data.html  # Passing KV pairs to VMs via cloud-init
 ```
 
 ## Explainers
 
 Each explainer is an interactive HTML document with inline exercises and collapsible answer panels. Open them in a browser to study.
 
-### Explainer 1: XRD Creation & Processing Pipeline
+### Explainer 1: [XRD Creation & Processing Pipeline](learning-records/explainer-001-xrd-pipeline.html)
 
 **What it covers:**
 - The 7-step pipeline: XRD → ArgoCD sync → Composition → Claim → XR → Composition rendering → KubeVirt Provider → OpenShift VM
@@ -69,7 +72,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 2: Composition Functions
+### Explainer 2: [Composition Functions](learning-records/explainer-002-composition-functions.html)
 
 **What it covers:**
 - The Composition Function model: ordered pipeline steps with function references
@@ -84,7 +87,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 3: Provider Installation on OpenShift
+### Explainer 3: [Provider Installation on OpenShift](learning-records/explainer-003-provider-installation.html)
 
 **What it covers:**
 - Provider architecture: CRDs + controller
@@ -100,7 +103,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 4: ArgoCD App-of-Apps Bootstrap
+### Explainer 4: [ArgoCD App-of-Apps Bootstrap](learning-records/explainer-004-argocd-bootstrap.html)
 
 **What it covers:**
 - The App-of-Apps pattern: root Application → Infrastructure Application → Workload Claims
@@ -116,7 +119,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 5: End-to-End Walkthrough, Runbooks & Task Plan
+### Explainer 5: [End-to-End Walkthrough, Runbooks & Task Plan](learning-records/explainer-005-end-to-end-runbooks.html)
 
 **What it covers:**
 - Complete scenario: developer provisions a web server VM from Git commit
@@ -130,7 +133,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 6: Application-Level VM Workload Development
+### Explainer 6: [Application-Level VM Workload Development](learning-records/explainer-006-vm-workload-dev.html)
 
 **What it covers:**
 - VM workload layers: Git → ArgoCD → Crossplane → Disk Image → Guest Agent → Guest OS
@@ -145,7 +148,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 **Exercise:** Design a guest config schema supporting both Linux and Windows VMs
 
 
-### Explainer 7: XRD & Composition Deep Dive — VM Workloads
+### Explainer 7: [XRD & Composition Deep Dive — VM Workloads](learning-records/explainer-007-xrd-composition-vm-deep-dive.html)
 
 **What it covers:**
 - XRD-to-Composition binding: label-based vs. selector-based matching, versioning
@@ -161,6 +164,57 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 **Key concepts:** declarative mode, pipeline mode, connection, FunctionConfig, ProviderConfig, deferred connections
 
 **Exercise:** Design a multi-claim XRD supporting WebServer, Database, and Workstation workload types with a single XRD
+
+### Explainer 8: [OS Image Management](learning-records/explainer-008-os-image-management.html)
+
+**What it covers:**
+- Image registry architecture: container registry + VM disk image registry
+- Image templates in XRDs: named references resolved by the composition
+- Full lifecycle: build (Packer) → scan (Trivy/Grype) → push → deploy
+- Update strategies: new VMs only, snapshot → recreate, in-place update
+- DataVolumes: HTTP pull vs pre-populated PVCs for fast provisioning
+- xVersions for schema evolution: imageDigest, requireScanned, imageAgeMaxDays
+- Troubleshooting: stuck DataVolumes, failed VM starts, scan blockers
+
+**Key concepts:** image template, DataVolume, Packer, Trivy, pre-populated PVC, xVersions
+
+**Exercise:** Design an image update pipeline for 500 VMs with zero-downtime rollout
+
+---
+
+### Explainer 9: [Cloud-init & Guest Agent](learning-records/explainer-009-cloud-init-and-guest-agent.html)
+
+**What it covers:**
+- Cloud-init YAML and MIME multi-part document structures
+- OpenShift-specific networking: multus CNI, OVN-Kubernetes conflicts
+- Guest agent capabilities: OS info, IPs, filesystem access, graceful shutdown, live migration
+- Guest agent status flow: VM → KubeVirt VMI → Crossplane XR → ArgoCD
+- Composition pattern: cloud-init secret + DataVolume injection
+- Windows guest support: guest custom data and QEMU GA for Windows
+- Troubleshooting: cloud-init failures, agent connection, network conflicts, SSH
+
+**Key concepts:** cloud-init, write_files, multus, QEMU guest agent, VMI, guestInfo, virt-copy-in
+
+**Exercise:** Design cloud-init for a 3-tier app stack (web/app/db) with multus secondary networks
+
+---
+
+### Explainer 10: [VM Configuration Data](learning-records/explainer-010-vm-configuration-data.html)
+
+**What it covers:**
+- Passing KV pairs from XR spec into VMs at provisioning time
+- Four approaches compared: cloud-init write_files, Puppet ENC, env vars, guest agent push
+- Recommended: YAML file via cloud-init write_files → known puppet path
+- XRD schema for configData and secretData fields
+- Composition: transform XR → YAML file format
+- Handling sensitive data: inline vs External Secrets Operator (Vault)
+- Runtime updates: edit XR → ArgoCD syncs → puppet reads new file
+- JSON alternative when puppet requires it
+- Troubleshooting: missing files, YAML errors, permission issues
+
+**Key concepts:** configData, cloud-init write_files, Hiera, External Secrets Operator, puppet profile
+
+**Exercise:** Design a config pipeline supporting 10+ puppet profiles with per-VM overrides and secret rotation
 ## Glossary
 
 The canonical terminology is captured in [`GLOSSARY.md`](GLOSSARY.md). Key terms include:
