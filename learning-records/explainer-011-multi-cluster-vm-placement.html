@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Cluster VM Placement Logic</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b94e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+  li { margin-bottom: 0.5rem; }
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .callout-label {
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+  .callout.warning { border-left-color: var(--accent-orange); }
+  .callout.warning .callout-label { color: var(--accent-orange); }
+  .callout.danger { border-left-color: var(--accent-red); }
+  .callout.danger .callout-label { color: var(--accent-red); }
+  .callout.success { border-left-color: var(--accent-green); }
+  .callout.success .callout-label { color: var(--accent-green); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: #f0f6fc;
+    font-weight: 600;
+  }
+  td { background: var(--bg); }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .toc h2 {
+    font-size: 1.1rem;
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    border: none;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc li { margin-bottom: 0.25rem; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ -->
+<h1>Multi-Cluster VM Placement Logic</h1>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Default KubeVirt scheduling only works within a single cluster. In a multi-cluster, multi-datacenter environment, you need custom placement logic to decide which cluster runs each VM. This explainer covers the why, the how, and the implementation using Crossplane.</p>
+
+<div class="toc">
+  <h2>Contents</h2>
+  <ul>
+    <li><a href="#problem">1. Why Default Scheduling Falls Short</a></li>
+    <li><a href="#placement-rules">2. Placement Rules</a></li>
+    <li><a href="#xrd-schema">3. XRD Schema for Placement</a></li>
+    <li><a href="#placement-controller">4. Placement Controller (Custom Crossplane Controller)</a></li>
+    <li><a href="#placement-function">5. Placement as a Composition Function</a></li>
+    <li><a href="#composition-routing">6. Composition: Routing to the Right Cluster</a></li>
+    <li><a href="#disaster-recovery">7. Disaster Recovery & Failover</a></li>
+    <li><a href="#troubleshooting">8. Troubleshooting</a></li>
+    <li><a href="#whats-next">9. What's Next</a></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="problem">1. Why Default Scheduling Falls Short</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>KubeVirt's scheduler places VMs on nodes within a single cluster. It has no awareness of:</p>
+
+<ul>
+  <li><strong>Other clusters</strong> — it can't see or target resources in a different cluster</li>
+  <li><strong>Datacenter topology</strong> — it doesn't know which DC its cluster lives in</li>
+  <li><strong>Cross-cluster dependencies</strong> — it can't ensure VMs are co-located with their data or services</li>
+  <li><strong>Compliance boundaries</strong> — it can't enforce geographic or regulatory placement rules</li>
+  <li><strong>Cost optimization</strong> — it doesn't consider cluster operating costs</li>
+</ul>
+
+<p>In a multi-DC setup, you need a higher-level placement decision that runs <strong>before</strong> the KubeVirt scheduler. This decision determines which cluster hosts the VM, then the KubeVirt scheduler handles node placement within that cluster.</p>
+
+<div class="diagram">┌───────────────────────────────────────────────────────────┐
+│              Multi-Datacenter Topology                    │
+│                                                           │
+│  DC1 (US-East)        DC2 (US-West)       DC3 (EU-West)   │
+│  ┌──────────┐         ┌──────────┐         ┌──────────┐   │
+│  │ Cluster  │         │ Cluster  │         │ Cluster  │   │
+│  │ A        │         │ B        │         │ C        │   │
+│  │          │         │          │         │          │   │
+│  │ Nodes:   │         │ Nodes:   │         │ Nodes:   │   │
+│  │ 8 nodes  │         │ 8 nodes  │         │ 8 nodes  │   │
+│  │ Ceph RBD │         │ Ceph RBD │         │ Ceph RBD │   │
+│  └──────────┘         └──────────┘         └──────────┘   │
+│                                                           │
+│  Placement logic decides:                                  │
+│  "VM web-01 → Cluster A (DC1, near storage)"              │
+│  "VM web-02 → Cluster B (DC2, for DR)"                    │
+│  "VM db-01  → Cluster A (DC1, data locality)"              │
+└───────────────────────────────────────────────────────────┘</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="placement-rules">2. Placement Rules</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Placement rules determine which cluster a VM should run on. Rules can be combined and prioritized.</p>
+
+<table>
+  <tr>
+    <th>Rule</th>
+    <th>Description</th>
+    <th>Example</th>
+  </tr>
+  <tr>
+    <td><strong>Data locality</strong></td>
+    <td>Place VM on cluster closest to its storage</td>
+    <td>DB VM → cluster with Ceph RBD pool</td>
+  </tr>
+  <tr>
+    <td><strong>Anti-affinity</strong></td>
+    <td>Spread VMs across clusters for resilience</td>
+    <td>Web tier VMs → one per cluster</td>
+  </tr>
+  <tr>
+    <td><strong>Compliance</strong></td>
+    <td>Enforce geographic/regulatory boundaries</td>
+    <td>EU user data → EU cluster only</td>
+  </tr>
+  <tr>
+    <td><strong>Capacity</strong></td>
+    <td>Balance load across clusters</td>
+    <td>Avoid clusters above 80% CPU</td>
+  </tr>
+  <tr>
+    <td><strong>Cost</strong></td>
+    <td>Prefer cheaper clusters when possible</td>
+    <td>Dev workloads → low-cost cluster</td>
+  </tr>
+  <tr>
+    <td><strong>Explicit</strong></td>
+    <td>User specifies the target cluster</td>
+    <td>"Run on Cluster B"</td>
+  </tr>
+  <tr>
+    <td><strong>Zone affinity</strong></td>
+    <td>Co-locate VMs that communicate frequently</td>
+    <td>App + DB on same cluster</td>
+  </tr>
+</table>
+
+<p>Rules are evaluated in priority order. If the highest-priority rule (e.g., compliance) eliminates all clusters, the next rule (e.g., capacity) is used.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="xrd-schema">3. XRD Schema for Placement</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Add placement fields to your XRD. The XR spec expresses the user's placement intent, and the placement controller resolves it to a specific cluster.</p>
+
+<pre><code># xrd/xvirtualmachine.yaml — placement fields
+apiVersion: apiextensions.crossplane.io/v1
+kind: XRD
+metadata:
+  name: xvirtualmachines.example.org
+spec:
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                # ── Placement intent ──
+                placement:
+                  type: object
+                  description: >
+                    Placement preferences for this VM. The placement
+                    controller resolves these to a specific cluster.
+                  nullable: true
+                  properties:
+                    # Explicit cluster selection (highest priority)
+                    clusterName:
+                      type: string
+                      description: >
+                        Explicitly target a specific cluster.
+                        Overrides all other placement rules.
+                    # Datacenter constraint
+                    datacenter:
+                      type: string
+                      enum:
+                        - dc1-east
+                        - dc2-west
+                        - dc3-eu
+                      description: >
+                        Restrict placement to a specific datacenter.
+                    # Anti-affinity
+                    spreadAcrossClusters:
+                      type: boolean
+                      description: >
+                        When true, the controller tries to place this VM
+                        on a different cluster than existing VMs with the
+                        same tier label.
+                    # Co-location
+                    colocateWith:
+                      type: string
+                      description: >
+                        Place this VM on the same cluster as the named VM.
+                        Example: colocateWith: "db-01"
+                    # Cost preference
+                    costOptimized:
+                      type: boolean
+                      description: >
+                        Prefer lower-cost clusters when capacity allows.
+                    # Compliance zone
+                    complianceZone:
+                      type: string
+                      description: >
+                        Geographic compliance zone. Cluster must match.
+                      enum:
+                        - us-east
+                        - us-west
+                        - eu-west
+                    # Resource requirements (for capacity-aware placement)
+                    requiredCpu:
+                      type: integer
+                      description: Required CPU cores
+                    requiredMemoryGi:
+                      type: integer
+                      description: Required memory in GiB
+
+                # ── Status: resolved cluster (set by placement controller) ──
+                clusterRef:
+                  type: string
+                  description: >
+                    Resolved cluster name. Set by the placement controller
+                    after evaluating placement rules.
+                  nullable: true</code></pre>
+
+<p>Usage — user creates a VM with placement intent:</p>
+
+<pre><code># workloads/dev/web-server-01.yaml
+apiVersion: example.org/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: web-server-01
+  namespace: workloads-dev
+spec:
+  parameters:
+    imageTemplate: centos-stream-9
+    hostname: web-server-01
+    cpu: 2
+    memory: 4Gi
+    tier: web
+
+    placement:
+      spreadAcrossClusters: true
+      colocateWith: "web-server-02"
+      requiredCpu: 2
+      requiredMemoryGi: 4</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="placement-controller">4. Placement Controller (Custom Crossplane Controller)</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The placement controller is a custom Crossplane managed controller that watches XRs, evaluates placement rules, and sets the <code>clusterRef</code> status field. This is the core of custom placement logic.</p>
+
+<h3>4.1 Controller Architecture</h3>
+
+<div class="diagram">┌─────────────────────────────────────────────────────┐
+│                Placement Controller                 │
+│                                                     │
+│  Watches: XVirtualMachine XR                        │
+│  Sets:    status.clusterRef                         │
+│                                                     │
+│  Flow:                                              │
+│  1. XR created with placement intent                │
+│  2. Controller reads placement spec                 │
+│  3. Queries cluster inventory (K8s API)             │
+│  4. Evaluates placement rules (priority order)      │
+│  5. Selects best cluster                            │
+│  6. Sets status.clusterRef                          │
+│  7. Composition uses clusterRef to route            │
+└─────────────────────────────────────────────────────┘</div>
+
+<h3>4.2 Cluster Inventory</h3>
+
+<p>The controller needs to know about all available clusters. In a Crossplane multi-cluster setup, clusters are typically managed as XR resources (e.g., <code>ManagedCluster</code> XR) or registered as <code>ProviderConfig</code> resources.</p>
+
+<pre><code>// Pseudocode for cluster inventory query
+type ClusterInfo struct {
+    Name       string
+    Datacenter string
+    ComplianceZone string
+    CPUAvailable int
+    MemoryAvailableGi int
+    VMCount    int
+    Labels     map[string]string
+}
+
+func (c *PlacementController) getClusterInventory() ([]ClusterInfo, error) {
+    // Query all ProviderConfigs (each represents a cluster)
+    var pcs crossplanev1.ProviderConfigList
+    if err := c.Client.List(context.Background(), &pcs); err != nil {
+        return nil, err
+    }
+
+    var clusters []ClusterInfo
+    for _, pc := range pcs.Items {
+        // Get cluster metrics from Prometheus or K8s API
+        metrics := c.getClusterMetrics(pc.Name)
+        clusters = append(clusters, ClusterInfo{
+            Name:              pc.Name,
+            Datacenter:        pc.Labels["topology.kubernetes.io/zone"],
+            ComplianceZone:    pc.Labels["compliance/zone"],
+            CPUAvailable:      metrics.CPUAvailable,
+            MemoryAvailableGi: metrics.MemoryAvailableGi,
+            VMCount:           metrics.VMCount,
+            Labels:            pc.Labels,
+        })
+    }
+    return clusters, nil
+}</code></pre>
+
+<h3>4.3 Placement Evaluation</h3>
+
+<pre><code>// Pseudocode for placement evaluation
+func (c *PlacementController) evaluatePlacement(xr *v1alpha1.XVirtualMachine, clusters []ClusterInfo) (string, error) {
+    placement := xr.Spec.Placement
+    if placement == nil {
+        // No placement intent — pick first available cluster
+        return clusters[0].Name, nil
+    }
+
+    // Step 1: Apply hard constraints (eliminate invalid clusters)
+    var candidates []ClusterInfo
+    for _, cluster := range clusters {
+        // Compliance zone check
+        if placement.ComplianceZone != "" && cluster.ComplianceZone != placement.ComplianceZone {
+            continue
+        }
+        // Datacenter check
+        if placement.Datacenter != "" && cluster.Datacenter != placement.Datacenter {
+            continue
+        }
+        // Explicit cluster name
+        if placement.ClusterName != "" && cluster.Name != placement.ClusterName {
+            continue
+        }
+        candidates = append(candidates, cluster)
+    }
+
+    if len(candidates) == 0 {
+        return "", fmt.Errorf("no cluster matches placement constraints")
+    }
+
+    // Step 2: If explicit cluster specified, return it
+    if placement.ClusterName != "" {
+        return placement.ClusterName, nil
+    }
+
+    // Step 3: Apply soft constraints (score remaining candidates)
+    for _, candidate := range candidates {
+        candidate.Score = 0
+
+        // Anti-affinity: prefer clusters with fewer VMs of same tier
+        if placement.SpreadAcrossClusters {
+            existingVMs := c.countVMsByTier(candidate.Name, xr.Spec.Tier)
+            candidate.Score -= existingVMs * 10
+        }
+
+        // Co-location: prefer cluster with colocateWith target
+        if placement.ColocateWith != "" {
+            colocatedCluster := c.getVMCluster(placement.ColocateWith)
+            if colocatedCluster == candidate.Name {
+                candidate.Score += 100
+            }
+        }
+
+        // Capacity: prefer clusters with more available resources
+        if placement.RequiredCpu != 0 && candidate.CPUAvailable >= placement.RequiredCpu {
+            candidate.Score += candidate.CPUAvailable
+        }
+        if placement.RequiredMemoryGi != 0 && candidate.MemoryAvailableGi >= placement.RequiredMemoryGi {
+            candidate.Score += candidate.MemoryAvailableGi
+        }
+
+        // Cost optimization
+        if placement.CostOptimized {
+            cost := c.getClusterCost(candidate.Name)
+            candidate.Score -= cost * 5
+        }
+    }
+
+    // Step 4: Sort by score (descending) and return best
+    sort.Slice(candidates, func(i, j int) bool {
+        return candidates[i].Score > candidates[j].Score
+    })
+
+    return candidates[0].Name, nil
+}</code></pre>
+
+<h3>4.4 Controller Reconciliation</h3>
+
+<pre><code>// Pseudocode for reconciliation loop
+func (c *PlacementController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+    xr := &v1alpha1.XVirtualMachine{}
+    if err := c.Get(ctx, req.NamespacedName, xr); err != nil {
+        return ctrl.Result{}, client.IgnoreNotFound(err)
+    }
+
+    // Skip if already placed
+    if xr.Status.ClusterRef != nil && *xr.Status.ClusterRef != "" {
+        return ctrl.Result{}, nil
+    }
+
+    // Get cluster inventory
+    clusters, err := c.getClusterInventory()
+    if err != nil {
+        return ctrl.Result{}, err
+    }
+
+    // Evaluate placement
+    clusterName, err := c.evaluatePlacement(xr, clusters)
+    if err != nil {
+        // Set error condition
+        c.setCondition(xr, "PlacementFailed", metav1.ConditionFalse, err.Error())
+        c.Status().Update(ctx, xr)
+        return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+    }
+
+    // Set resolved cluster
+    xr.Status.ClusterRef = &clusterName
+    c.Status().Update(ctx, xr)
+
+    return ctrl.Result{}, nil
+}</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="placement-function">5. Placement as a Composition Function</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Alternatively, placement logic can be implemented as a Composition Function (Go-Templating) instead of a separate controller. This keeps everything within the Composition pipeline.</p>
+
+<pre><code># compositions/xvirtualmachine-pipeline.yaml
+- step: place-vm
+  functionRef:
+    name: crossplane-function-go-templating
+  inputs:
+    - apiVersion: apps.crossplane.io/v1alpha1
+      kind: RuntimeConfig
+      resources:
+        - name: cluster-selection
+          base:
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: '{{ .XR.metadata.name }}-cluster-selection'
+              namespace: '{{ .XR.metadata.namespace }}'
+          patches:
+            # Read cluster inventory from a pre-populated ConfigMap
+            - type: FromCompositeFieldPath
+              fromFieldPath: metadata.name
+              toFieldPath: metadata.name
+            # Apply placement rules via template
+            patchesStringData: |
+              {{- $clusters := list "cluster-a" "cluster-b" "cluster-c" -}}
+              {{- $placement := .XR.Spec.Placement -}}
+              {{- $bestCluster := "" -}}
+              {{- $bestScore := -9999 -}}
+
+              {{- range $clusters -}}
+                {{- $cluster := . -}}
+                {{- $score := 0 -}}
+
+                {{- /* Compliance zone check */ -}}
+                {{- if and $placement.ComplianceZone (ne (index $.ClusterLabels $cluster "compliance/zone") $placement.ComplianceZone) -}}
+                  {{- continue -}}
+                {{- end -}}
+
+                {{- /* Datacenter check */ -}}
+                {{- if and $placement.Datacenter (ne (index $.ClusterLabels $cluster "topology.kubernetes.io/zone") $placement.Datacenter) -}}
+                  {{- continue -}}
+                {{- end -}}
+
+                {{- /* Explicit cluster */ -}}
+                {{- if eq $placement.ClusterName $cluster -}}
+                  {{- $bestCluster = $cluster -}}
+                  {{- break -}}
+                {{- end -}}
+
+                {{- /* Anti-affinity scoring */ -}}
+                {{- if $placement.SpreadAcrossClusters -}}
+                  {{- $vmCount := index $.ClusterVMCount $cluster -}}
+                  {{- $score = sub $score (mul $vmCount 10) -}}
+                {{- end -}}
+
+                {{- /* Co-location scoring */ -}}
+                {{- if $placement.ColocateWith -}}
+                  {{- $targetCluster := index $.VMClusterMap $placement.ColocateWith -}}
+                  {{- if eq $targetCluster $cluster -}}
+                    {{- $score = add $score 100 -}}
+                  {{- end -}}
+                {{- end -}}
+
+                {{- /* Capacity scoring */ -}}
+                {{- if and $placement.RequiredCpu (ge (index $.ClusterCPUCapacity $cluster) $placement.RequiredCpu) -}}
+                  {{- $score = add $score (index $.ClusterCPUCapacity $cluster) -}}
+                {{- end -}}
+
+                {{- /* Cost scoring */ -}}
+                {{- if $placement.CostOptimized -}}
+                  {{- $cost := index $.ClusterCost $cluster -}}
+                  {{- $score = sub $score (mul $cost 5) -}}
+                {{- end -}}
+
+                {{- if gt $score $bestScore -}}
+                  {{- $bestScore = $score -}}
+                  {{- $bestCluster = $cluster -}}
+                {{- end -}}
+              {{- end -}}
+
+              selectedCluster: {{ $bestCluster | quote }}
+        - name: cluster-config-ref
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.clusterRef
+              toFieldPath: spec.providerConfigRef.name</code></pre>
+
+<p>This approach is simpler to set up but less flexible than a dedicated controller. Use it for basic placement rules; use a controller for complex, dynamic placement logic.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="composition-routing">6. Composition: Routing to the Right Cluster</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Once the placement controller resolves <code>clusterRef</code>, the composition uses it to route resources to the correct cluster. This is done via <code>ProviderConfigRef</code>.</p>
+
+<pre><code># compositions/xvirtualmachine-pipeline.yaml
+- step: route-to-cluster
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+    - apiVersion: pt.fn.crossplane.io/v1
+      kind: Resources
+      resources:
+        # VirtualMachine — routed to the placement-selected cluster
+        - name: virtualmachine
+          base:
+            apiVersion: kubevirt.io/v1
+            kind: VirtualMachine
+            metadata:
+              name: '{{ .XR.metadata.name }}'
+            spec:
+              runStrategy: Running
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.clusterRef
+              toFieldPath: spec.providerConfigRef.name
+              policy:
+                when: ValueNotFound
+
+        # DataVolume — must be on the same cluster (storage locality)
+        - name: datavolume
+          base:
+            apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataVolume
+            metadata:
+              name: '{{ .XR.metadata.name }}-disk'
+            spec:
+              source:
+                http:
+                  url: 'PLACEHOLDER_IMAGE_URL'
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.clusterRef
+              toFieldPath: spec.providerConfigRef.name
+              policy:
+                when: ValueNotFound
+
+        # ProviderConfigRef — ensures all resources go to the right cluster
+        - name: provider-config-ref
+          base:
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: '{{ .XR.metadata.name }}-cloudinit-secret'
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.clusterRef
+              toFieldPath: spec.providerConfigRef.name
+              policy:
+                when: ValueNotFound</code></pre>
+
+<p>The key insight: <code>ProviderConfigRef</code> tells Crossplane which cluster's provider to use. Each cluster has its own <code>ProviderConfig</code> that points to that cluster's API server. By setting <code>ProviderConfigRef.name</code> to the placement-selected cluster, all managed resources are created on that cluster.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="disaster-recovery">7. Disaster Recovery & Failover</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Custom placement logic enables automated DR. When a cluster goes down, the placement controller can re-evaluate and relocate affected VMs.</p>
+
+<h3>7.1 Cluster Health Monitoring</h3>
+
+<pre><code>// Placement controller monitors cluster health
+func (c *PlacementController) checkClusterHealth() {
+    // Check each cluster's API server reachability
+    for _, cluster := range c.clusters {
+        reachable := c.checkAPIReachability(cluster.Name)
+        if !reachable {
+            // Mark cluster as unhealthy
+            c.setClusterCondition(cluster.Name, "Healthy", false)
+
+            // Find VMs on this cluster that need relocation
+            affectedVMs := c.getVMsOnCluster(cluster.Name)
+            for _, vm := range affectedVMs {
+                c.triggerRelocation(vm)
+            }
+        }
+    }
+}</code></pre>
+
+<h3>7.2 Automated Relocation</h3>
+
+<pre><code>func (c *PlacementController) triggerRelocation(xr *v1alpha1.XVirtualMachine) {
+    // Clear the clusterRef to trigger re-placement
+    xr.Status.ClusterRef = nil
+
+    // Add a condition indicating relocation is needed
+    c.setCondition(xr, "Relocating", true, "Source cluster unreachable")
+
+    // The controller's reconciliation loop will:
+    // 1. See clusterRef is nil
+    // 2. Re-evaluate placement rules
+    // 3. Select a new cluster (avoiding the unhealthy one)
+    // 4. Set the new clusterRef
+    // 5. Composition creates VM on new cluster
+}</code></pre>
+
+<h3>7.3 DR Strategy Patterns</h3>
+
+<table>
+  <tr>
+    <th>Pattern</th>
+    <th>How</th>
+    <th>Recovery Time</th>
+  </tr>
+  <tr>
+    <td><strong>Active-Passive</strong></td>
+    <td>VM runs on primary cluster. On failure, relocate to secondary.</td>
+    <td>5-15 minutes</td>
+  </tr>
+  <tr>
+    <td><strong>Active-Active</strong></td>
+    <td>VM runs on multiple clusters simultaneously. Failover is instant.</td>
+    <td>< 1 minute</td>
+  </tr>
+  <tr>
+    <td><strong>Warm Standby</strong></td>
+    <td>VM replica runs on secondary cluster with minimal resources. Scale up on failover.</td>
+    <td>2-5 minutes</td>
+  </tr>
+</table>
+
+<div class="callout success">
+  <div class="callout-label">Best practice</div>
+  For critical workloads, use Active-Active with placement rules that enforce spreadAcrossClusters: true. This ensures VMs run on multiple clusters simultaneously, providing instant failover without relocation.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="troubleshooting">8. Troubleshooting</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<h3>8.1 Placement controller not selecting a cluster</h3>
+
+<pre><code># Check XR status
+oc get xvirtualmachine &lt;vm-name&gt; -n workloads-dev -o yaml | grep -A5 status
+
+# Check if placement controller is running
+oc get pods -n crossplane-system -l app=crossplane-placement-controller
+
+# Check controller logs
+oc logs -n crossplane-system $(oc get pods -n crossplane-system -l app=crossplane-placement-controller -o name) | grep -i placement
+
+# Check for placement errors
+oc describe xvirtualmachine &lt;vm-name&gt; -n workloads-dev | grep -A10 Conditions</code></pre>
+
+<h3>8.2 Resources created on wrong cluster</h3>
+
+<pre><code># Verify clusterRef is set
+oc get xvirtualmachine &lt;vm-name&gt; -n workloads-dev -o jsonpath='{.status.clusterRef}'
+
+# Check which cluster the VM actually exists on
+oc get virtualmachine &lt;vm-name&gt; -n workloads-dev --kubeconfig &lt;cluster-a-kubeconfig&gt;
+oc get virtualmachine &lt;vm-name&gt; -n workloads-dev --kubeconfig &lt;cluster-b-kubeconfig&gt;
+
+# Check ProviderConfig references
+oc get composition xvirtualmachine-pipeline -n crossplane-system -o yaml | grep -A5 providerConfigRef</code></pre>
+
+<h3>8.3 No cluster matches placement constraints</h3>
+
+<pre><code># Check cluster inventory
+oc get providerconfigs
+
+# Check cluster labels (compliance zone, datacenter)
+oc get providerconfigs -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels}{"\n"}{end}'
+
+# Common issue: compliance zone doesn't match any cluster
+# Fix: add compliance zone label to cluster's ProviderConfig
+oc patch providerconfig &lt;cluster-name&gt; \
+  --type merge \
+  -p '{"metadata":{"labels":{"compliance/zone":"us-east"}}}'</code></pre>
+
+<h3>8.4 Anti-affinity not spreading VMs</h3>
+
+<pre><code># Check if spreadAcrossClusters is set
+oc get xvirtualmachine &lt;vm-name&gt; -n workloads-dev -o jsonpath='{.spec.placement.spreadAcrossClusters}'
+
+# Check VM distribution across clusters
+for cluster in cluster-a cluster-b cluster-c; do
+  echo "=== $cluster ==="
+  oc get virtualmachine -n workloads-dev --kubeconfig $cluster-kubeconfig | wc -l
+done</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="whats-next">9. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>With multi-cluster placement in place, VMs are intelligently distributed across your datacenter topology. The remaining topics:</p>
+
+<ul>
+  <li><strong>Multi-environment rollout</strong> — managing config and placement across dev/staging/prod</li>
+  <li><strong>Monitoring & alerting</strong> — tracking cluster health, placement decisions, VM distribution</li>
+  <li><strong>Security & compliance</strong> — RBAC for multi-cluster, network policies, audit trails</li>
+</ul>
+
+</body>
+</html>
