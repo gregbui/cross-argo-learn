@@ -52,6 +52,7 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-008-os-image-management.html    # OS image management: build, scan, push, update strategies
     ├── explainer-009-cloud-init-and-guest-agent.html  # Cloud-init provisioning and guest agent integration
     ├── explainer-010-vm-configuration-data.html  # Passing KV pairs to VMs via cloud-init
+    ├── explainer-011-multi-cluster-vm-placement.html  # Multi-cluster VM placement logic
 ```
 
 ## Explainers
@@ -215,6 +216,24 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 **Key concepts:** configData, cloud-init write_files, Hiera, External Secrets Operator, puppet profile
 
 **Exercise:** Design a config pipeline supporting 10+ puppet profiles with per-VM overrides and secret rotation
+
+---
+
+### Explainer 11: [Multi-Cluster VM Placement](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-011-multi-cluster-vm-placement.html)
+
+**What it covers:**
+- Why default KubeVirt scheduling falls short in multi-cluster, multi-datacenter environments
+- Placement rules: data locality, anti-affinity, compliance, capacity, cost, explicit selection
+- XRD schema for placement intent and resolved clusterRef
+- Placement controller: custom Crossplane managed controller for cluster selection
+- Placement as a Composition Function (Go-Templating) alternative
+- Composition routing: using ProviderConfigRef to target the right cluster
+- Disaster recovery patterns: active-passive, active-active, warm standby
+- Troubleshooting: missing clusters, wrong cluster placement, anti-affinity failures
+
+**Key concepts:** ProviderConfigRef, placement controller, cluster inventory, anti-affinity, disaster recovery, failover
+
+**Exercise:** Design a placement policy for a 3-tier app (web/app/db) across 3 datacenters with DR requirements
 ## Glossary
 
 The canonical terminology is captured in [`GLOSSARY.md`](GLOSSARY.md). Key terms include:
