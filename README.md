@@ -148,6 +148,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 **Exercise:** Design a guest config schema supporting both Linux and Windows VMs
 
+---
 
 ### Explainer 7: [XRD & Composition Deep Dive — VM Workloads](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-007-xrd-composition-vm-deep-dive.html)
 
@@ -165,6 +166,8 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 **Key concepts:** declarative mode, pipeline mode, connection, FunctionConfig, ProviderConfig, deferred connections
 
 **Exercise:** Design a multi-claim XRD supporting WebServer, Database, and Workstation workload types with a single XRD
+
+---
 
 ### Explainer 8: [OS Image Management](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-008-os-image-management.html)
 
