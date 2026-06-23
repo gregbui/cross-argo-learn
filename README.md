@@ -58,7 +58,7 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
 
 Each explainer is an interactive HTML document with inline exercises and collapsible answer panels. Open them in a browser to study.
 
-### Explainer 1: [XRD Creation & Processing Pipeline](learning-records/explainer-001-xrd-pipeline.html)
+### Explainer 1: [XRD Creation & Processing Pipeline](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-001-xrd-pipeline.html)
 
 **What it covers:**
 - The 7-step pipeline: XRD → ArgoCD sync → Composition → Claim → XR → Composition rendering → KubeVirt Provider → OpenShift VM
@@ -72,7 +72,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 2: [Composition Functions](learning-records/explainer-002-composition-functions.html)
+### Explainer 2: [Composition Functions](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-002-composition-functions.html)
 
 **What it covers:**
 - The Composition Function model: ordered pipeline steps with function references
@@ -87,7 +87,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 3: [Provider Installation on OpenShift](learning-records/explainer-003-provider-installation.html)
+### Explainer 3: [Provider Installation on OpenShift](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-003-provider-installation.html)
 
 **What it covers:**
 - Provider architecture: CRDs + controller
@@ -103,7 +103,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 4: [ArgoCD App-of-Apps Bootstrap](learning-records/explainer-004-argocd-bootstrap.html)
+### Explainer 4: [ArgoCD App-of-Apps Bootstrap](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-004-argocd-bootstrap.html)
 
 **What it covers:**
 - The App-of-Apps pattern: root Application → Infrastructure Application → Workload Claims
@@ -119,7 +119,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 5: [End-to-End Walkthrough, Runbooks & Task Plan](learning-records/explainer-005-end-to-end-runbooks.html)
+### Explainer 5: [End-to-End Walkthrough, Runbooks & Task Plan](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-005-end-to-end-runbooks.html)
 
 **What it covers:**
 - Complete scenario: developer provisions a web server VM from Git commit
@@ -133,7 +133,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 6: [Application-Level VM Workload Development](learning-records/explainer-006-vm-workload-dev.html)
+### Explainer 6: [Application-Level VM Workload Development](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-006-vm-workload-dev.html)
 
 **What it covers:**
 - VM workload layers: Git → ArgoCD → Crossplane → Disk Image → Guest Agent → Guest OS
@@ -148,7 +148,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 **Exercise:** Design a guest config schema supporting both Linux and Windows VMs
 
 
-### Explainer 7: [XRD & Composition Deep Dive — VM Workloads](learning-records/explainer-007-xrd-composition-vm-deep-dive.html)
+### Explainer 7: [XRD & Composition Deep Dive — VM Workloads](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-007-xrd-composition-vm-deep-dive.html)
 
 **What it covers:**
 - XRD-to-Composition binding: label-based vs. selector-based matching, versioning
@@ -165,7 +165,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 **Exercise:** Design a multi-claim XRD supporting WebServer, Database, and Workstation workload types with a single XRD
 
-### Explainer 8: [OS Image Management](learning-records/explainer-008-os-image-management.html)
+### Explainer 8: [OS Image Management](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-008-os-image-management.html)
 
 **What it covers:**
 - Image registry architecture: container registry + VM disk image registry
@@ -182,7 +182,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 9: [Cloud-init & Guest Agent](learning-records/explainer-009-cloud-init-and-guest-agent.html)
+### Explainer 9: [Cloud-init & Guest Agent](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-009-cloud-init-and-guest-agent.html)
 
 **What it covers:**
 - Cloud-init YAML and MIME multi-part document structures
@@ -199,7 +199,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 10: [VM Configuration Data](learning-records/explainer-010-vm-configuration-data.html)
+### Explainer 10: [VM Configuration Data](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-010-vm-configuration-data.html)
 
 **What it covers:**
 - Passing KV pairs from XR spec into VMs at provisioning time
