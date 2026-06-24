@@ -225,6 +225,22 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ### Explainer 11: [Multi-Cluster VM Placement](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-011-multi-cluster-vm-placement.html)
 
+**What it covers:**
+- Why default KubeVirt scheduling falls short in multi-cluster, multi-datacenter environments
+- Placement rules: data locality, anti-affinity, compliance, capacity, cost, explicit selection
+- XRD schema for placement intent and resolved clusterRef
+- Placement controller: custom Crossplane managed controller for cluster selection
+- Placement as a Composition Function (Go-Templating) alternative
+- Composition routing: using ProviderConfigRef to target the right cluster
+- Disaster recovery patterns: active-passive, active-active, warm standby
+- Troubleshooting: missing clusters, wrong cluster placement, anti-affinity failures
+
+**Key concepts:** ProviderConfigRef, placement controller, cluster inventory, anti-affinity, disaster recovery, failover
+
+**Exercise:** Design a placement policy for a 3-tier app (web/app/db) across 3 datacenters with DR requirements
+
+---
+
 ### Explainer 12: [VM Configuration Data for Windows VMs](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-012-windows-vm-configuration-data.html)
 
 **What it covers:**
@@ -242,21 +258,7 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 **Exercise:** Design a config pipeline for a Windows IIS web server with puppet profiles, app config, and secret rotation
 
-**What it covers:**
-- Why default KubeVirt scheduling falls short in multi-cluster, multi-datacenter environments
-- Placement rules: data locality, anti-affinity, compliance, capacity, cost, explicit selection
-- XRD schema for placement intent and resolved clusterRef
-- Placement controller: custom Crossplane managed controller for cluster selection
-- Placement as a Composition Function (Go-Templating) alternative
-- Composition routing: using ProviderConfigRef to target the right cluster
-- Disaster recovery patterns: active-passive, active-active, warm standby
-- Troubleshooting: missing clusters, wrong cluster placement, anti-affinity failures
-
-**Key concepts:** ProviderConfigRef, placement controller, cluster inventory, anti-affinity, disaster recovery, failover
-
-**Exercise:** Design a placement policy for a 3-tier app (web/app/db) across 3 datacenters with DR requirements
 ## Glossary
-
 The canonical terminology is captured in [`GLOSSARY.md`](GLOSSARY.md). Key terms include:
 
 | Category | Terms |
