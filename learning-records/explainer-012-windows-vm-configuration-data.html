@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VM Configuration Data for Windows VMs</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b94e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+  li { margin-bottom: 0.5rem; }
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .callout-label {
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+  .callout.warning { border-left-color: var(--accent-orange); }
+  .callout.warning .callout-label { color: var(--accent-orange); }
+  .callout.danger { border-left-color: var(--accent-red); }
+  .callout.danger .callout-label { color: var(--accent-red); }
+  .callout.success { border-left-color: var(--accent-green); }
+  .callout.success .callout-label { color: var(--accent-green); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: #f0f6fc;
+    font-weight: 600;
+  }
+  td { background: var(--bg); }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .toc h2 {
+    font-size: 1.1rem;
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    border: none;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc li { margin-bottom: 0.25rem; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ -->
+<h1>VM Configuration Data for Windows VMs</h1>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Explainer-010 covers Linux VM configuration via cloud-init write_files and puppet YAML profiles. Windows VMs use different mechanisms: Guest Custom Data (cloud-init for Windows), WinRM/PowerShell, and custom data injection. This explainer covers how to pass KV pairs (puppet profiles, app config, feature flags) into Windows VMs at provisioning time.</p>
+
+<div class="toc">
+  <h2>Contents</h2>
+  <ul>
+    <li><a href="#problem">1. Why Linux Approach Doesn't Work for Windows</a></li>
+    <li><a href="#windows-mechanisms">2. Windows Configuration Mechanisms</a></li>
+    <li><a href="#guest-custom-data">3. Guest Custom Data (Cloud-init for Windows)</a></li>
+    <li><a href="#xrd-schema">4. XRD Schema for Windows Config</a></li>
+    <li><a href="#composition">5. Composition: Generating Windows Config</a></li>
+    <li><a href="#puppet-windows">6. Puppet on Windows</a></li>
+    <li><a href="#powershell">7. PowerShell Custom Data Script</a></li>
+    <li><a href="#secrets">8. Handling Sensitive Data</a></li>
+    <li><a href="#updates">9. Updating Config Without Reboot</a></li>
+    <li><a href="#troubleshooting">10. Troubleshooting</a></li>
+    <li><a href="#whats-next">11. What's Next</a></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="problem">1. Why Linux Approach Doesn't Work for Windows</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The Linux approach (cloud-init write_files dropping YAML at a known path) doesn't work for Windows because:</p>
+
+<ul>
+  <li><strong>cloud-init for Windows is different</strong> — supports a subset of Linux cloud-init features, uses different file paths</li>
+  <li><strong>File paths are different</strong> — Windows uses <code>C:\</code> paths, not <code>/etc/</code></li>
+  <li><strong>Puppet on Windows uses different formats</strong> — Hiera YAML works, but installation and service management differ</li>
+  <li><strong>No shell</strong> — cloud-init <code>runcmd</code> runs PowerShell on Windows, not bash</li>
+  <li><strong>Line endings</strong> — Windows expects CRLF, not LF</li>
+</ul>
+
+<div class="diagram">Linux (explainer-010)                  Windows (this explainer)
+─────────────────────────────────      ─────────────────────────────────
+cloud-init write_files                 Guest Custom Data (cloud-init)
+/etc/puppet/profiles.yaml              C:\puppet\profiles.yaml
+bash runcmd                            PowerShell runcmd
+puppet agent -t                        puppet agent -t
+YAML config file                     YAML or JSON config file
+chmod 0644                            icacls /grant
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="windows-mechanisms">2. Windows Configuration Mechanisms</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Four approaches for passing config data into Windows VMs:</p>
+
+<table>
+  <tr>
+    <th>Mechanism</th>
+    <th>Best For</th>
+    <th>Complexity</th>
+    <th>Git-Auditable</th>
+  </tr>
+  <tr>
+    <td><strong>1. Guest Custom Data (cloud-init)</strong></td>
+    <td>First-boot config, puppet profiles</td>
+    <td>Low</td>
+    <td>Yes (XR)</td>
+  </tr>
+  <tr>
+    <td><strong>2. PowerShell Custom Data Script</strong></td>
+    <td>Complex bootstrapping, package installs</td>
+    <td>Medium</td>
+    <td>Yes (XR)</td>
+  </tr>
+  <tr>
+    <td><strong>3. WinRM Remote Execution</strong></td>
+    <td>Post-boot config, runtime updates</td>
+    <td>High</td>
+    <td>Partial</td>
+  </tr>
+  <tr>
+    <td><strong>4. Guest Agent File Push</strong></td>
+    <td>Post-boot config updates</td>
+    <td>Medium</td>
+    <td>Yes (XR)</td>
+  </tr>
+</table>
+
+<p><strong>Approach 1 (Guest Custom Data)</strong> is recommended for first-boot provisioning. <strong>Approach 3 (WinRM)</strong> is best for runtime updates.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="guest-custom-data">3. Guest Custom Data (Cloud-init for Windows)</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>KubeVirt supports cloud-init for Windows via the <code>guestInfo</code> cloud-init source. This is a subset of Linux cloud-init features, optimized for Windows.</p>
+
+<h3>3.1 Supported Features</h3>
+
+<ul>
+  <li><strong>hostname</strong> — set the Windows hostname</li>
+  <li><strong>users</strong> — create/configure local users (limited)</li>
+  <li><strong>password</strong> — set Administrator password</li>
+  <li><strong>runcmd</strong> — run PowerShell commands at boot</li>
+  <li><strong>write_files</strong> — write files to disk (limited support)</li>
+  <li><strong>final_message</strong> — log a message at boot completion</li>
+</ul>
+
+<div class="callout warning">
+  <div class="callout-label">Warning</div>
+  Guest Custom Data for Windows does NOT support: network configuration, package management, SSH keys, or most Linux-specific directives. Use PowerShell scripts for complex bootstrapping.
+</div>
+
+<h3>3.2 Guest Custom Data Structure</h3>
+
+<p>The Guest Custom Data is passed via the VirtualMachine spec's <code>spec.dataVolumeTemplates</code> or <code>spec.template.spec.domain.devices.autoboot</code> with a cloud-init source.</p>
+
+<pre><code># KubeVirt VM spec for Windows Guest Custom Data
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: win-server-01
+spec:
+  dataVolumeTemplates:
+    - metadata:
+        name: win-server-01-cloudinit
+      spec:
+        pvc:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Mi
+        source:
+          guestInfo:
+            userData: |
+              #cloud-config
+              hostname: win-server-01
+              password: {{ .XR.spec.secretData.admin_password }}
+              chpasswd:
+                expire: false
+              runcmd:
+                - powershell -Command "New-Item -ItemType Directory -Path 'C:\puppet' -Force"
+                - powershell -Command "Set-Content -Path 'C:\puppet\profiles.yaml' -Value '{{ .XR.spec.configData.puppet_yaml }}'"
+                - powershell -Command "Start-Service -Name puppet"
+              final_message: "Windows VM {{ .XR.metadata.name }} configured"</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="xrd-schema">4. XRD Schema for Windows Config</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Add Windows-specific config fields to your XRD. The XR spec holds the config data, and the composition transforms it into Windows-compatible formats.</p>
+
+<pre><code># xrd/xvirtualmachine.yaml — Windows config fields
+apiVersion: apiextensions.crossplane.io/v1
+kind: XRD
+metadata:
+  name: xvirtualmachines.example.org
+spec:
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                # ── OS type ──
+                osType:
+                  type: string
+                  enum:
+                    - linux
+                    - windows
+                  description: >
+                    Operating system type. Determines which config
+                    mechanism is used (cloud-init for Linux, Guest
+                    Custom Data for Windows).
+                  default: linux
+
+                # ── Windows-specific config ──
+                windowsConfig:
+                  type: object
+                  description: >
+                    Configuration data for Windows VMs. Transformed
+                    into Guest Custom Data by the composition.
+                  nullable: true
+                  properties:
+                    puppet_profile:
+                      type: array
+                      items:
+                        type: string
+                      description: >
+                        List of puppet profiles to apply.
+                        Example: ["base", "webserver", "monitoring"]
+                    app_environment:
+                      type: string
+                      description: Application environment (dev/staging/prod)
+                    app_config:
+                      type: object
+                      description: >
+                        Application-specific key-value pairs.
+                      nullable: true
+                    features:
+                      type: object
+                      description: Feature flags
+                      nullable: true
+                    custom:
+                      type: object
+                      description: >
+                        Arbitrary KV pairs. Mapped to a YAML file
+                        that puppet reads.
+                      nullable: true
+                    admin_password:
+                      type: string
+                      description: >
+                        Administrator password. Injected via K8s Secret
+                        for security.
+                      nullable: true
+
+                # ── Sensitive data ──
+                secretData:
+                  type: object
+                  description: >
+                    Sensitive values. Injected separately.
+                  nullable: true
+                  properties:
+                    admin_password:
+                      type: string
+                    db_password:
+                      type: string
+                    api_key:
+                      type: string</code></pre>
+
+<p>Usage — user creates a Windows VM with config data:</p>
+
+<pre><code># workloads/dev/win-server-01.yaml
+apiVersion: example.org/v1alpha1
+kind: VirtualMachineClaim
+metadata:
+  name: win-server-01
+  namespace: workloads-dev
+spec:
+  parameters:
+    imageTemplate: windows-server-2022
+    hostname: win-server-01
+    cpu: 4
+    memory: 8Gi
+    osType: windows
+
+    windowsConfig:
+      puppet_profile:
+        - base
+        - iis
+        - monitoring
+      app_environment: production
+      app_config:
+        db_host: db.internal.example.org
+        db_port: "5432"
+        workers: 4
+        log_level: info
+      features:
+        dark_mode: true
+        beta_api: false
+      custom:
+        iis_worker_processes: "4"
+        iis_max_connections: "10000"
+
+    secretData:
+      admin_password: "S3cur3P@ss"
+      db_password: "dbp@ss"
+      api_key: "ak-123456"</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="composition">5. Composition: Generating Windows Config</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The composition reads the XR spec and generates Guest Custom Data for Windows. This includes the YAML config file content and PowerShell commands to write it to disk.</p>
+
+<h3>5.1 Generate YAML Config Content</h3>
+
+<pre><code># compositions/xvirtualmachine-pipeline.yaml
+- step: transform-windows-config
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+    - apiVersion: pt.fn.crossplane.io/v1
+      kind: Resources
+      resources:
+        - name: configmap
+          base:
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: '{{ .XR.metadata.name }}-windows-config'
+              namespace: '{{ .XR.metadata.namespace }}'
+            data:
+              # Puppet YAML config for Windows
+              profiles.yaml: |
+                # Auto-generated by Crossplane — do not edit
+                # Source: {{ .XR.metadata.namespace }}/{{ .XR.metadata.name }}
+                ---
+                puppet_profile:
+                {{- range .XR.spec.windowsConfig.puppet_profile }}
+                  - {{ . | quote }}
+                {{- end }}
+                {{- if .XR.spec.windowsConfig.app_environment }}
+                app_environment: {{ .XR.spec.windowsConfig.app_environment | quote }}
+                {{- end }}
+                {{- if .XR.spec.windowsConfig.app_config }}
+                app_config:
+                {{- range $key, $value := .XR.spec.windowsConfig.app_config }}
+                  {{ $key }}: {{ $value | toPrettyJson }}
+                {{- end }}
+                {{- end }}
+                {{- if .XR.spec.windowsConfig.features }}
+                features:
+                {{- range $key, $value := .XR.spec.windowsConfig.features }}
+                  {{ $key }}: {{ $value }}
+                {{- end }}
+                {{- end }}
+                {{- if .XR.spec.windowsConfig.custom }}
+                custom:
+                {{- range $key, $value := .XR.spec.windowsConfig.custom }}
+                  {{ $key }}: {{ $value | toPrettyJson }}
+                {{- end }}
+                {{- end }}</code></pre>
+
+<h3>5.2 Generate PowerShell Bootstrap Script</h3>
+
+<pre><code>        - name: bootstrap-script
+          base:
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: '{{ .XR.metadata.name }}-bootstrap'
+              namespace: '{{ .XR.metadata.namespace }}'
+            data:
+              bootstrap.ps1: |
+                # PowerShell bootstrap script for Windows VM
+                # Generated by Crossplane — do not edit
+                # Source: {{ .XR.metadata.namespace }}/{{ .XR.metadata.name }}
+
+                $ErrorActionPreference = 'Stop'
+
+                # Create puppet directory
+                Write-Host "Creating puppet directory..."
+                New-Item -ItemType Directory -Path 'C:\puppet' -Force | Out-Null
+
+                # Write profiles.yaml
+                Write-Host "Writing profiles.yaml..."
+                $yamlContent = @'
+                {{ .XR.Spec.WindowsConfig.PuppetYaml | default "# No config" }}
+                '@
+                Set-Content -Path 'C:\puppet\profiles.yaml' -Value $yamlContent -Encoding UTF8
+
+                # Set permissions (icacls for Windows)
+                Write-Host "Setting file permissions..."
+                icacls 'C:\puppet\profiles.yaml' /grant 'Administrators:F' /T
+
+                # Enable and start puppet service
+                Write-Host "Starting puppet service..."
+                if (Get-Service -Name 'puppet' -ErrorAction SilentlyContinue) {
+                    Set-Service -Name 'puppet' -StartupType Automatic
+                    Start-Service -Name 'puppet'
+                    Write-Host "Puppet service started"
+                } else {
+                    Write-Warning "Puppet service not found — install puppet first"
+                }
+
+                # Write ready marker
+                Write-Host "VM configured at $(Get-Date)" | Out-File -FilePath 'C:\VM_READY' -Encoding UTF8
+
+                Write-Host "Bootstrap complete"</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="puppet-windows">6. Puppet on Windows</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Puppet runs on Windows with some differences from Linux. The Hiera YAML format is the same, but installation and service management differ.</p>
+
+<h3>6.1 Puppet Installation in Base Image</h3>
+
+<p>Include Puppet installation in your Windows base image build (Packer provisioner):</p>
+
+<pre><code># Packer Windows provisioner
+provisioner "powershell" {
+  inline = [
+    # Download and install Puppet
+    'Invoke-WebRequest -Uri "https://apt.puppet.com/puppet7-release-windows.ps1" -OutFile "C:\puppet-install.ps1"',
+    'powershell -ExecutionPolicy Bypass -File "C:\puppet-install.ps1"',
+    # Enable and start puppet service
+    'Start-Service -Name puppet',
+    'Set-Service -Name puppet -StartupType Automatic',
+    # Install Hiera YAML support
+    'gem install yaml',
+  ]
+}</code></pre>
+
+<h3>6.2 Puppet Hiera Configuration on Windows</h3>
+
+<p>The Hiera configuration is the same as Linux — Puppet reads YAML files from the hierarchy:</p>
+
+<pre><code># C:\puppet\hiera.yaml (in base image)
+---
+version: 5
+defaults:
+  datadir: hieradata
+  data_backend: yaml
+
+hierarchy:
+  - name: "Per-VM override (Crossplane)"
+    paths:
+      - "vm-override.yaml"
+    data_backend: yaml
+
+  - name: "Environment"
+    paths:
+      - "%{environment}.yaml"
+    data_backend: yaml
+
+  - name: "Common"
+    paths:
+      - "common.yaml"
+    data_backend: yaml</code></pre>
+
+<h3>6.3 Puppet Module Usage on Windows</h3>
+
+<p>Inside a Puppet module, consume the config data via Hiera lookups (same as Linux):</p>
+
+<pre><code># manifests/init.pp (same as Linux)
+class vm_config (
+  Array[String] $profile = [],
+  Hash        $app       = {},
+  Hash        $features  = {},
+) {
+
+  $profiles = $profile ? {
+    []    => hiera('puppet::profile', ['base']),
+    default => $profile,
+  }
+
+  include $profiles
+
+  if !empty($app) {
+    file { 'C:/vm-config/app-config.yaml':
+      content => yaml_encode($app),
+      mode    => '0644',
+    }
+  }
+}</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="powershell">7. PowerShell Custom Data Script</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>For complex bootstrapping, use a PowerShell script as the Guest Custom Data. This runs at first boot and handles all configuration.</p>
+
+<pre><code># compositions/xvirtualmachine-pipeline.yaml — Guest Custom Data
+- step: inject-guestcustomdata
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+    - apiVersion: pt.fn.crossplane.io/v1
+      kind: Resources
+      resources:
+        - name: guestcustomdata-secret
+          base:
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: '{{ .XR.metadata.name }}-guestcustomdata'
+              namespace: '{{ .XR.metadata.namespace }}'
+            type: Opaque
+            stringData:
+              userData: |
+                #cloud-config
+                hostname: {{ .XR.spec.guest.hostname | default .XR.metadata.name }}
+                password: {{ .XR.spec.secretData.admin_password | default "P@ssw0rd!" }}
+                chpasswd:
+                  expire: false
+                runcmd:
+                  - powershell -Command "&amp; {
+                      Write-Host 'Creating puppet directory...';
+                      New-Item -ItemType Directory -Path 'C:\puppet' -Force | Out-Null;
+
+                      Write-Host 'Writing profiles.yaml...';
+                      $yaml = @'
+                      # Auto-generated by Crossplane
+                      # Source: {{ .XR.metadata.namespace }}/{{ .XR.metadata.name }}
+                      ---
+                      puppet_profile:
+                      {{- range .XR.spec.windowsConfig.puppet_profile }}
+                        - {{ . | quote }}
+                      {{- end }}
+                      {{- if .XR.spec.windowsConfig.app_environment }}
+                      app_environment: {{ .XR.spec.windowsConfig.app_environment | quote }}
+                      {{- end }}
+                      {{- if .XR.spec.windowsConfig.app_config }}
+                      app_config:
+                      {{- range $key, $value := .XR.spec.windowsConfig.app_config }}
+                        {{ $key }}: {{ $value | toPrettyJson }}
+                      {{- end }}
+                      {{- end }}
+                      {{- if .XR.spec.windowsConfig.features }}
+                      features:
+                      {{- range $key, $value := .XR.spec.windowsConfig.features }}
+                        {{ $key }}: {{ $value }}
+                      {{- end }}
+                      {{- end }}
+                      '@;
+                      Set-Content -Path 'C:\puppet\profiles.yaml' -Value $yaml -Encoding UTF8;
+
+                      Write-Host 'Starting puppet service...';
+                      if (Get-Service -Name 'puppet' -ErrorAction SilentlyContinue) {
+                        Set-Service -Name 'puppet' -StartupType Automatic;
+                        Start-Service -Name 'puppet';
+                      } else {
+                        Write-Warning 'Puppet service not found';
+                      }
+
+                      Write-Host 'VM configured at $(Get-Date)';
+                      'configured' | Out-File -FilePath 'C:\VM_READY' -Encoding UTF8;
+                    }"
+                final_message: "Windows VM {{ .XR.metadata.name }} configured"</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="secrets">8. Handling Sensitive Data</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Windows VMs need sensitive data (admin password, DB credentials, API keys) handled securely.</p>
+
+<h3>8.1 Simple: inline in Guest Custom Data (dev/low-risk)</h3>
+
+<p>For non-production or low-risk secrets, inline them in the Guest Custom Data. They're base64-encoded in K8s but not encrypted at rest.</p>
+
+<pre><code>                password: {{ .XR.spec.secretData.admin_password | default "P@ssw0rd!" }}
+                runcmd:
+                  - powershell -Command "$env:DB_PASSWORD = '{{ .XR.spec.secretData.db_password }}'"
+                  - powershell -Command "Set-Item -Path 'env:DB_PASSWORD' -Value '{{ .XR.spec.secretData.db_password }}'"</code></pre>
+
+<h3>8.2 Production: External Secrets Operator (recommended)</h3>
+
+<p>For production, use the OpenShift External Secrets Operator to pull from Vault, AWS Secrets Manager, etc.</p>
+
+<pre><code># compositions/xvirtualmachine-pipeline.yaml
+- step: external-secrets
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+    - apiVersion: pt.fn.crossplane.io/v1
+      kind: Resources
+      resources:
+        - name: admin-password-secret
+          base:
+            apiVersion: external-secrets.io/v1beta1
+            kind: ExternalSecret
+            metadata:
+              name: '{{ .XR.metadata.name }}-admin-password'
+              namespace: '{{ .XR.metadata.namespace }}'
+            spec:
+              secretStoreRef:
+                name: vault-backend
+                kind: SecretStore
+              target:
+                name: '{{ .XR.metadata.name }}-admin-password'
+                creationPolicy: Owner
+              data:
+                - secretKey: admin_password
+                  remoteRef:
+                    key: production/windows/admin-password
+        - name: db-password-secret
+          base:
+            apiVersion: external-secrets.io/v1beta1
+            kind: ExternalSecret
+            metadata:
+              name: '{{ .XR.metadata.name }}-db-password'
+              namespace: '{{ .XR.metadata.namespace }}'
+            spec:
+              secretStoreRef:
+                name: vault-backend
+                kind: SecretStore
+              target:
+                name: '{{ .XR.metadata.name }}-db-password'
+                creationPolicy: Owner
+              data:
+                - secretKey: db_password
+                  remoteRef:
+                    key: production/db/password</code></pre>
+
+<p>Then reference the created K8s Secret in Guest Custom Data:</p>
+
+<pre><code>                runcmd:
+                  - powershell -Command "$env:DB_PASSWORD = (Get-Content 'C:\secrets\db_password.txt')"
+                  - powershell -Command "Set-Item -Path 'env:DB_PASSWORD' -Value (Get-Content 'C:\secrets\db_password.txt')"</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="updates">9. Updating Config Without Reboot</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>If you need to update config on a running Windows VM, you have two options:</p>
+
+<h3>9.1 Puppet runs periodically (default)</h3>
+
+<p>If Puppet is running on a schedule (every 30 min default), it will re-read the config file on each run. To trigger an immediate run:</p>
+
+<pre><code># Via guest agent (requires guest agent running)
+oc virt guest-exec &lt;vm-name&gt; -n workloads-dev -- powershell -Command "puppet agent -t"
+
+# Via WinRM port-forward
+oc port-forward &lt;vm-name&gt; 5985:5985 -n workloads-dev
+# Then use Invoke-Command or psexec to run puppet agent -t</code></pre>
+
+<h3>9.2 Update the XR → ArgoCD syncs → Puppet picks it up</h3>
+
+<pre><code># Update the VirtualMachineClaim
+oc edit virtualmachineclaim win-server-01 -n workloads-dev
+# Change windowsConfig.puppet_profile, save
+# ArgoCD detects drift, syncs
+# Puppet runs on next cycle, reads new file
+# VM reconfigured — no reboot needed</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="troubleshooting">10. Troubleshooting</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<h3>10.1 Guest Custom Data not applied</h3>
+
+<pre><code># Check if Guest Custom Data was injected
+oc get secret &lt;vm-name&gt;-guestcustomdata -n workloads-dev -o jsonpath='{.data.userData}'
+
+# Check cloud-init status inside the VM
+oc rsh &lt;vm-debug-pod&gt;
+# Then into the guest:
+Get-Content 'C:\var\log\cloud-init.log'
+Get-Content 'C:\var\log\cloud-init-output.log'
+
+# Check if VM_READY file exists
+Get-Content 'C:\VM_READY'</code></pre>
+
+<h3>10.2 Puppet not reading the file</h3>
+
+<pre><code># Verify file exists and is valid YAML
+Get-Content 'C:\puppet\profiles.yaml'
+# Check YAML syntax (PowerShell)
+Import-Module -Name YAML
+$data = Get-Content 'C:\puppet\profiles.yaml' | ConvertFrom-Yaml
+
+# Check Puppet logs
+Get-Content 'C:\ProgramData\PuppetLabs\Puppet\var\log\puppet.log' | Select-String -Pattern 'profile'
+
+# Force Puppet to run
+puppet agent -t --verbose</code></pre>
+
+<h3>10.3 File permissions wrong</h3>
+
+<pre><code># Check permissions (icacls for Windows)
+icacls 'C:\puppet\profiles.yaml'
+
+# Should allow Administrators full control
+# If wrong, fix:
+icacls 'C:\puppet\profiles.yaml' /grant 'Administrators:F' /T</code></pre>
+
+<h3>10.4 PowerShell errors in runcmd</h3>
+
+<pre><code># Check PowerShell error output
+oc rsh &lt;vm-debug-pod&gt;
+Get-Content 'C:\Windows\Temp\puppet-bootstrap.log'
+
+# Common issues:
+# 1. Execution policy blocking scripts
+#    Fix: Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned
+# 2. Service not found
+#    Fix: Install-Package -Name puppet -Source https://forge.puppet.com
+# 3. YAML parsing errors
+#    Fix: Ensure YAML is valid (check for unquoted special chars)</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="whats-next">11. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>With Windows VM configuration in place, your stack supports both Linux and Windows VMs. The remaining topics:</p>
+
+<ul>
+  <li><strong>Multi-environment rollout</strong> — managing config promotion across dev/staging/prod for mixed Linux/Windows fleets</li>
+  <li><strong>Monitoring & alerting</strong> — tracking Puppet compliance, VM health, config drift across OS types</li>
+  <li><strong>Security & compliance</strong> — Windows-specific hardening, secret rotation, audit trails</li>
+</ul>
+
+</body>
+</html>
