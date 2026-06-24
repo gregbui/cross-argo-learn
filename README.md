@@ -53,6 +53,7 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-009-cloud-init-and-guest-agent.html  # Cloud-init provisioning and guest agent integration
     ├── explainer-010-vm-configuration-data.html  # Passing KV pairs to VMs via cloud-init
     ├── explainer-011-multi-cluster-vm-placement.html  # Multi-cluster VM placement logic
+    ├── explainer-012-windows-vm-configuration-data.html  # VM configuration data for Windows VMs
 ```
 
 ## Explainers
@@ -223,6 +224,23 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 ---
 
 ### Explainer 11: [Multi-Cluster VM Placement](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-011-multi-cluster-vm-placement.html)
+
+### Explainer 12: [VM Configuration Data for Windows VMs](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-012-windows-vm-configuration-data.html)
+
+**What it covers:**
+- Why Linux cloud-init approach doesn't work for Windows VMs
+- Windows configuration mechanisms: Guest Custom Data, PowerShell scripts, WinRM, guest agent file push
+- Guest Custom Data (cloud-init for Windows): supported features, structure, limitations
+- XRD schema for Windows config: osType, windowsConfig fields, secretData
+- Composition: generating Guest Custom Data and PowerShell bootstrap scripts
+- Puppet on Windows: installation in base image, Hiera configuration, module usage
+- Handling sensitive data: inline vs External Secrets Operator (Vault)
+- Runtime updates: Puppet periodic runs, XR edits, ArgoCD sync
+- Troubleshooting: Guest Custom Data not applied, Puppet not reading files, PowerShell errors
+
+**Key concepts:** Guest Custom Data, cloud-init for Windows, PowerShell, WinRM, Puppet on Windows, icacls, External Secrets Operator
+
+**Exercise:** Design a config pipeline for a Windows IIS web server with puppet profiles, app config, and secret rotation
 
 **What it covers:**
 - Why default KubeVirt scheduling falls short in multi-cluster, multi-datacenter environments
