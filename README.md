@@ -46,14 +46,19 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-001-xrd-pipeline.html     # XRD creation and processing pipeline
     ├── explainer-002-composition-functions.html  # Composition Functions
     ├── explainer-003-provider-installation.html  # Provider installation on OpenShift
+    │
     ├── explainer-004-argocd-bootstrap.html # ArgoCD App-of-Apps bootstrap
     ├── explainer-005-end-to-end-runbooks.html # End-to-end walkthrough, runbooks, task plan
+    │
     ├── explainer-006-vm-workload-dev.html  # OS images, cloud-init, guest agents, Windows
+    ├── explainer-007-xrd-composition-vm-deep-dive.html  # XRD & Composition deep dive for VM workloads
     ├── explainer-008-os-image-management.html    # OS image management: build, scan, push, update strategies
     ├── explainer-009-cloud-init-and-guest-agent.html  # Cloud-init provisioning and guest agent integration
     ├── explainer-010-vm-configuration-data.html  # Passing KV pairs to VMs via cloud-init
+    │
     ├── explainer-011-multi-cluster-vm-placement.html  # Multi-cluster VM placement logic
     ├── explainer-012-windows-vm-configuration-data.html  # VM configuration data for Windows VMs
+    ├── explainer-013-storage-for-vms-datavolumes-pvc-lifecycle-and-storage-classes.html  # Storage for VMs — DataVolumes, PVC lifecycle, storage classes
 ```
 
 ## Explainers
@@ -258,6 +263,31 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 **Exercise:** Design a config pipeline for a Windows IIS web server with puppet profiles, app config, and secret rotation
 
+---
+
+### Explainer 13: [Storage for VMs — DataVolumes, PVC Lifecycle, and Storage Classes](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-013-storage-for-vms-datavolumes-pvc-lifecycle-and-storage-classes.html)
+
+**What it covers:**
+- OpenShift storage classes for VMs: Ceph RBD, CephFS, local storage, enterprise SAN
+- StorageProfile CRD and how CDI consumes it
+- PVC lifecycle: 6 phases from Pending to Available
+- Reclaim policies (Delete vs Retain) and why Delete is dangerous for production VMs
+- DataVolume CRD: HTTP import, PVC clone, snapshot clone, blank disk, CDI upload
+- DataVolume phases and failure modes
+- CDI configuration: resource constraints, upload proxy, air-gapped environments
+- Crossplane composition: DataVolume → PVC → VirtualMachine dependency chain
+- Composition function: patchAndSync pattern for DataVolume readiness polling
+- Storage class selection: performance profiles, auto-selection in composition functions
+- Multi-DC storage: per-cluster storage independence, base image distribution strategies
+- DataImportCron: automated base image updates per cluster
+- Operational concerns: monitoring DVs, capacity planning, snapshot workflows
+- VolumeSnapshot and VirtualMachineSnapshot for backup/restore
+- Reclaim policy enforcement via OPA/Gatekeeper
+
+**Key concepts:** DataVolume, CDI, StorageClass, PVC lifecycle, reclaim policy, VolumeSnapshot, VirtualMachineSnapshot, DataImportCron, CDI upload proxy
+
+**Exercise:** Design a storage pipeline for a production PostgreSQL VM with base image management, snapshot policy, and cross-DC replication
+
 ## Glossary
 The canonical terminology is captured in [`GLOSSARY.md`](GLOSSARY.md). Key terms include:
 
@@ -303,6 +333,7 @@ This workspace is configured for Matt Pocock's engineering skills. The skills re
 | `34cacd2` | Add explainers 3-5 (provider installation, ArgoCD bootstrap, end-to-end/runbooks), remove redundant exercise answer files |
 | `91ce7d5` | Add explainer 6 (VM workload development), update MISSION.md scope |
 | `???????` | Add explainer 7 (XRD & Composition deep dive for VM workloads), update README.md |
+| `???????` | Add explainer 13 (Storage for VMs — DataVolumes, PVC lifecycle, storage classes), update README.md |
 
 ## Next Steps
 
@@ -312,4 +343,3 @@ Potential additional explainers to expand this workspace:
 - **Monitoring and observability**: VM metrics, alerting, logging
 - **Disaster recovery**: VM backup/restore, snapshot policies
 - **Multi-cluster management**: Crossplane management clusters, remote cluster provisioning
-    └── explainer-007-xrd-composition-vm-deep-dive.html  # XRD & Composition deep dive for VM workloads

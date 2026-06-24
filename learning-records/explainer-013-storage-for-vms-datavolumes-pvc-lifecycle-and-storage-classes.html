@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Storage for VMs — DataVolumes, PVC Lifecycle, and Storage Classes</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+    color: var(--accent-cyan);
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+  }
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    padding: 0.75rem 1rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout-label {
+    font-weight: 600;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+  .callout.green { border-left-color: var(--accent-green); }
+  .callout.green .callout-label { color: var(--accent-green); }
+  .callout.orange { border-left-color: var(--accent-orange); }
+  .callout.orange .callout-label { color: var(--accent-orange); }
+  .callout.red { border-left-color: var(--accent-red); }
+  .callout.red .callout-label { color: var(--accent-red); }
+  .callout.purple { border-left-color: var(--accent-purple); }
+  .callout.purple .callout-label { color: var(--accent-purple); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  td { background: var(--bg); }
+  ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+  li { margin-bottom: 0.5rem; }
+  .answer-toggle {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    margin: 1rem 0;
+  }
+  .answer-toggle:hover { background: var(--border); }
+  .answer-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .toc-title {
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+  }
+  .toc ul { list-style: none; padding-left: 0; margin-bottom: 0; }
+  .toc li { margin-bottom: 0.25rem; }
+  .toc a { color: var(--text); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>Explainer 13: Storage for VMs — DataVolumes, PVC Lifecycle, and Storage Classes</h1>
+
+<p>VM storage is the most operationally fragile part of a Crossplane + KubeVirt stack. Unlike containers, where ephemeral storage is the default and persistent storage is the exception, VMs <em>require</em> persistent disks to function. A misconfigured storage class, a reclaim policy that wipes a disk on delete, or a DataVolume stuck in <code>Pending</code> can silently prevent VM provisioning — or worse, destroy data when a developer deletes a claim.</p>
+
+<p>This explainer covers the storage layer end-to-end: how OpenShift exposes storage classes, how KubeVirt's <code>DataVolume</code> CRD manages VM disk images, how PVCs flow through their lifecycle, and how Crossplane compositions orchestrate all of it.</p>
+
+<div class="toc">
+  <div class="toc-title">Contents</div>
+  <ul>
+    <li>1. <a href="#sec-1">OpenShift Storage Classes for VMs</a></li>
+    <li>2. <a href="#sec-2">PVC Lifecycle Deep Dive</a></li>
+    <li>3. <a href="#sec-3">DataVolumes: The KubeVirt Storage Abstraction</a></li>
+    <li>4. <a href="#sec-4">Crossplane Composition: PVCs + DataVolumes</a></li>
+    <li>5. <a href="#sec-5">Storage Class Selection in Compositions</a></li>
+    <li>6. <a href="#sec-6">Multi-DC Storage Considerations</a></li>
+    <li>7. <a href="#sec-7">Operational Concerns</a></li>
+    <li>8. <a href="#sec-8">Summary</a></li>
+  </ul>
+</div>
+
+<h2 id="sec-1">1. OpenShift Storage Classes for VMs</h2>
+
+<p>OpenShift ships with a set of <strong>storage profiles</strong> — one per provisioner type — that describe what storage is available on the cluster. These are exposed as <code>StorageClass</code> objects, and they are the first decision point when provisioning VM disks.</p>
+
+<h3>Common storage classes on OpenShift</h3>
+
+<table>
+  <tr>
+    <th>StorageClass</th>
+    <th>Provisioner</th>
+    <th>Best for</th>
+    <th>Performance</th>
+  </tr>
+  <tr>
+    <td><code>ocs-storagecluster-cephfs</code></td>
+    <td>rook-ceph.cephfs.csi.ceph.com</td>
+    <td>Shared storage, multi-WI</td>
+    <td>Moderate</td>
+  </tr>
+  <tr>
+    <td><code>ocs-storagecluster-rbd</code></td>
+    <td>rook-ceph.rbd.csi.ceph.com</td>
+    <td>High-performance block</td>
+    <td>High</td>
+  </tr>
+  <tr>
+    <td><code>local-storage</code></td>
+    <td>local-storage</td>
+    <td>Low-latency, node-local</td>
+    <td>Highest</td>
+  </tr>
+  <tr>
+    <td><code>nfs-client</code></td>
+    <td>cluster.local/nfs-client-provisioner</td>
+    <td>File sharing, backups</td>
+    <td>Low-Moderate</td>
+  </tr>
+  <tr>
+    <td><code>vsc-viper-5a-fast</code></td>
+    <td>csi.vsc.emc.com</td>
+    <td>EMC VMAX/vMAX V5A</td>
+    <td>Very High</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <div class="callout-label">Key concept</div>
+  <p><strong>StorageClass</strong> is the Kubernetes abstraction for storage provisioning. It tells the cluster: (1) which provisioner to use, (2) whether to allow volume expansion, (3) what the reclaim policy is, and (4) what parameters to pass to the provisioner. For VMs, the storage class directly determines I/O performance, snapshot capability, and cross-node migration support.</p>
+</div>
+
+<h3>StorageProfile CRD</h3>
+
+<p>OpenShift also creates a <code>StorageProfile</code> CRD for each storage class. This is consumed by KubeVirt's <code>DataVolume</code> controller to determine:</p>
+
+<ul>
+  <li>Whether the storage class supports <code>ReadWriteMany</code> (needed for shared disk scenarios)</li>
+  <li>Whether the storage class supports <code>ReadWriteOncePod</code> (needed for certain snapshot workflows)</li>
+  <li>What clone strategy to use (VolumeSnapshot vs. direct copy)</li>
+  <li>The default <code>dataSource</code> for blank PVCs</li>
+</ul>
+
+<p>You can inspect the storage profile for a given class:</p>
+
+<pre><code>oc get storageprofile ocs-storagecluster-rbd -o yaml
+
+# Key fields:
+# - storageClassParameters: raw string from StorageClass
+# - volumeBindingMode: Immediate or WaitForFirstConsumer
+# - reclaimPolicy: Retain or Delete
+# - isDefault: true/false
+# - cloneStrategy: volumeSnapshot or copy</code></pre>
+
+<div class="callout green">
+  <div class="callout-label">Recommendation</div>
+  <p>For production VMs, prefer <code>ocs-storagecluster-rbd</code> (Ceph RBD) for general workloads and <code>local-storage</code> for latency-sensitive workloads (databases, domain controllers). Avoid NFS for primary VM disk storage — it works but adds significant overhead.</p>
+</div>
+
+<h2 id="sec-2">2. PVC Lifecycle Deep Dive</h2>
+
+<p>A PVC goes through a well-defined lifecycle. Understanding each phase is critical because Crossplane compositions often create PVCs directly, and failures at any phase can leave the XR stuck in <code>Creating</code>.</p>
+
+<h3>The 6 phases of a PVC</h3>
+
+<ol>
+  <li><strong>Pending</strong> — The PVC exists in the API server but has not been bound to a PV yet. The storage provisioner is evaluating whether it can fulfill the request.</li>
+  <li><strong>Provisioning</strong> — The provisioner has accepted the request and is creating the underlying storage (Ceph RBD image, NFS directory, etc.).</li>
+  <li><strong>Bound</strong> — The PV has been created and bound to the PVC. The storage is ready to be used.</li>
+  <li><strong>InUse</strong> — A Pod or VirtualMachineInstance is actively using the PV. For KubeVirt, this is when a <code>VirtualMachineInstance</code> references the PVC.</li>
+  <li><strong>Released</strong> — The consumer has been deleted, but the PV has not yet been reclaimed. The data is still on disk.</li>
+  <li><strong>Available</strong> — The PV has been reclaimed and is ready for a new PVC binding.</li>
+</ol>
+
+<h3>Reclaim policies</h3>
+
+<p>The <code>reclaimPolicy</code> on a StorageClass determines what happens when a PVC is deleted:</p>
+
+<table>
+  <tr>
+    <th>Policy</th>
+    <th>Behavior</th>
+    <th>VM Use Case</th>
+  </tr>
+  <tr>
+    <td><code>Delete</code> (default)</td>
+    <td>PV and underlying storage are deleted</td>
+    <td>Dev/test VMs, disposable workloads</td>
+  </tr>
+  <tr>
+    <td><code>Retain</code></td>
+    <td>PV remains in Released state, underlying storage preserved</td>
+    <td>Production VMs, VMs with persistent data</td>
+  </tr>
+  <tr>
+    <td><code>Recycle</code> (deprecated)</td>
+    <td>Runs <code>rm -rf /the-data</code> — not recommended</td>
+    <td>None</td>
+  </tr>
+</table>
+
+<div class="callout red">
+  <div class="callout-label">Critical</div>
+  <p><strong>Never use <code>Delete</code> reclaim policy for production VM storage.</strong> If a developer deletes a VirtualMachineClaim, a <code>Delete</code> reclaim policy will wipe the entire disk. Use <code>Retain</code> and implement explicit cleanup via a Composition's <code>deletionPolicy</code> or a separate lifecycle management layer.</p>
+</div>
+
+<h3>Volume expansion</h3>
+
+<p>OpenShift supports <code>allowVolumeExpansion: true</code> on storage classes. When enabled, a PVC can be resized while it is bound and in use. KubeVirt propagates the resize to the underlying hypervisor.</p>
+
+<pre><code># Expand a PVC in place
+kubectl patch pvc vm-disk-my-vm -p '{"spec":{"resources":{"requests":{"storage":"50Gi"}}}}'
+
+# Verify expansion
+kubectl get pvc vm-disk-my-vm -o jsonpath='{.status.capacity.storage}'</code></pre>
+
+<p>In a Crossplane composition, you would update the PVC's <code>spec.resources.requests.storage</code> field and let the controller reconcile. The <code>DataVolume</code> controller handles the resize propagation to KubeVirt.</p>
+
+<h2 id="sec-3">3. DataVolumes: The KubeVirt Storage Abstraction</h2>
+
+<p>A <code>DataVolume</code> (DV) is a KubeVirt CRD that manages the lifecycle of a VM's disk image. It is the bridge between raw PVCs and actual VM disk content. Without a DataVolume, you have a blank PVC — no OS, no image, nothing to boot from.</p>
+
+<h3>What a DataVolume does</h3>
+
+<ul>
+  <li><strong>Downloads</strong> an image from a URL (HTTP, HTTPS, OVA/OVF, CDI upload)</li>
+  <li><strong>Clones</strong> from an existing PVC or VolumeSnapshot</li>
+  <li><strong>Blanks</strong> a PVC with a minimal disk (for empty VMs)</li>
+  <li><strong>Uploads</strong> images via the CDI upload proxy (for air-gapped environments)</li>
+  <li>Tracks progress via <code>status.phase</code> and <code>status.progress</code></li>
+</ul>
+
+<h3>DataVolume phases</h3>
+
+<table>
+  <tr>
+    <th>Phase</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td><code>Empty</code></td>
+    <td>Just created, no action yet</td>
+  </tr>
+  <tr>
+    <td><code>Pending</code></td>
+    <td>Waiting for PVC to be provisioned</td>
+  </tr>
+  <tr>
+    <td><code>BucketClone</code></td>
+    <td>Cloning from a Ceph object store bucket</td>
+  </tr>
+  <tr>
+    <td><code>Importing</code></td>
+    <td>Downloading from a URL</td>
+  </tr>
+  <tr>
+    <td><code>Populating</code></td>
+    <td>Running a population operation (clone, upload, etc.)</td>
+  </tr>
+  <tr>
+    <td><code>Ready</code></td>
+    <td>Disk image is fully loaded and ready for VM use</td>
+  </tr>
+  <tr>
+    <td><code>Failed</code></td>
+    <td>Something went wrong — check <code>status.reason</code></td>
+  </tr>
+  <tr>
+    <td><code>Timeout</code></td>
+    <td>Population exceeded <code>spec.storage.size</code> timeout</td>
+  </tr>
+</table>
+
+<h3>DataVolume types</h3>
+
+<pre><code># 1. HTTP download (most common for base images)
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: dv-centos-stream-9
+spec:
+  source:
+    http:
+      url: "https://example.com/images/centos-stream-9.qcow2"
+  storage:
+    requests:
+      storage: 20Gi
+    storageClassName: ocs-storagecluster-rbd
+  storageClass:
+    - name: "cdi.kubevirt.io/storage.provisioner"
+      value: "ocs-storagecluster-cephfs"
+
+# 2. Clone from existing PVC
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: dv-vm-clone
+spec:
+  source:
+    pvc:
+      name: base-centos-stream-9
+      namespace: vm-import
+  storage:
+    requests:
+      storage: 20Gi
+    storageClassName: ocs-storagecluster-rbd
+
+# 3. Clone from VolumeSnapshot
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: dv-from-snapshot
+spec:
+  source:
+    snapshot:
+      name: vm-snapshot-2026-06-24
+      namespace: vm-system
+      kind: VolumeSnapshot
+  storage:
+    requests:
+      storage: 20Gi
+    storageClassName: ocs-storagecluster-rbd
+
+# 4. Blank PVC (empty disk)
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: dv-blank-disk
+spec:
+  storage:
+    requests:
+      storage: 100Gi
+    storageClassName: ocs-storagecluster-rbd
+
+# 5. CDI Upload (air-gapped / local image)
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: dv-upload
+spec:
+  source:
+    upload: {}
+  storage:
+    requests:
+      storage: 50Gi
+    storageClassName: ocs-storagecluster-rbd</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Connection to Explainer 8</div>
+  <p>Recall from explainer-008 (OS Image Management) that we stored base images in an OCI registry and used a <code>BaseImage</code> CRD. The <code>DataVolume</code> is the runtime artifact that consumes those images. The composition function should translate a <code>BaseImage</code> reference into the appropriate <code>DataVolume</code> source — typically a PVC clone from a pre-populated base image PVC, not a fresh HTTP download.</p>
+</div>
+
+<h3>CDI configuration</h3>
+
+<p>The <strong>Containerized Data Importer (CDI)</strong> is installed as part of OpenShift Virtualization. Its configuration lives in the <code>cdi</code> namespace and controls global behavior:</p>
+
+<pre><code>apiVersion: cdi.kubevirt.io/v1beta1
+kind: CDI
+metadata:
+  name: cdi
+spec:
+  config:
+    # Max concurrent imports/exports
+    podResourceConstraints:
+      high:
+        cpu: "2"
+        memory: "4Gi"
+      medium:
+        cpu: "1"
+        memory: "2Gi"
+      low:
+        cpu: "500m"
+        memory: "1Gi"
+    # Timeout for large image imports
+    dataImportCronTTL: 2h
+    # HTTP proxy settings for air-gapped environments
+    uploadProxyURLOverride: "https://cdi-upload-proxy.openshift-cnv.svc:443"</code></pre>
+
+<div class="callout orange">
+  <div class="callout-label">Resource constraints</div>
+  <p>CDI pods (importer, uploader, cloner) consume significant CPU and memory. In a busy cluster with many concurrent VM provisions, you may need to increase <code>podResourceConstraints.high</code> or scale the CDI deployment. Watch for <code>DataVolume</code> stuck in <code>Pending</code> — this is often CDI resource exhaustion, not a storage class problem.</p>
+</div>
+
+<h2 id="sec-4">4. Crossplane Composition: PVCs + DataVolumes</h2>
+
+<p>This is where Crossplane's composition function ties everything together. The composition must create both a <code>DataVolume</code> (to manage the disk image) and a <code>PVC</code> (to provide the storage claim that the VirtualMachine references). The order matters: the DataVolume populates the PVC, and the VirtualMachine can only reference the PVC once the DataVolume is <code>Ready</code>.</p>
+
+<h3>Composition function logic</h3>
+
+<pre><code>package main
+
+import (
+    "context"
+    "fmt"
+
+    cdiv1beta1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
+    corev1 "k8s.io/api/core/v1"
+    "sigs.k8s.io/controller-runtime/pkg/client"
+    "sigs.k8s.io/controller-runtime/pkg/function"
+)
+
+// ComposeStorage creates the DataVolume and PVC for a VM.
+// It returns the PVC name so the VirtualMachine can reference it.
+func ComposeStorage(ctx context.Context, r *composition.Runtime, req *composition.Request) (*composition.Response, error) {
+    xr := req.XR
+
+    // Determine base image source from XR spec
+    baseImageRef := xr.Spec.BaseImageRef
+    diskSize := xr.Spec.DiskSize
+    storageClass := xr.Spec.StorageClass
+
+    // 1. Create or patch the DataVolume
+    dv := &cdiv1beta1.DataVolume{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      fmt.Sprintf("dv-%s", xr.GetName()),
+            Namespace: xr.GetNamespace(),
+            OwnerReferences: []metav1.OwnerReference{
+                *metav1.NewControllerRef(xr, xr.GroupVersionKind()),
+            },
+        },
+        Spec: cdiv1beta1.DataVolumeSpec{
+            Source: cdiv1beta1.DataVolumeSource{
+                PVC: &cdiv1beta1.DataVolumeSourcePVC{
+                    Name:      baseImageRef.PVCName,
+                    Namespace: baseImageRef.PVCNamespace,
+                },
+            },
+            Storage: &corev1.ResourceRequirements{
+                Requests: corev1.ResourceList{
+                    corev1.ResourceStorage: diskSize,
+                },
+            },
+            StorageClassName: &storageClass,
+        },
+    }
+
+    // 2. Create or patch the PVC (the DV controller will bind it)
+    pvc := &corev1.PersistentVolumeClaim{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      fmt.Sprintf("vm-disk-%s", xr.GetName()),
+            Namespace: xr.GetNamespace(),
+            OwnerReferences: []metav1.OwnerReference{
+                *metav1.NewControllerRef(xr, xr.GroupVersionKind()),
+            },
+        },
+        Spec: corev1.PersistentVolumeClaimSpec{
+            AccessModes: []corev1.PersistentVolumeAccessMode{
+                corev1.ReadWriteOnce,
+            },
+            Resources: corev1.ResourceRequirements{
+                Requests: corev1.ResourceList{
+                    corev1.ResourceStorage: diskSize,
+                },
+            },
+            StorageClassName: &storageClass,
+            // After DV is Ready, the VM will use this PVC
+            DataSource: &corev1.TypedLocalObjectReference{
+                Name: fmt.Sprintf("dv-%s", xr.GetName()),
+                Kind: "DataVolume",
+            },
+        },
+    }
+
+    return &composition.Response{
+        Resources: map[string]*composition.Resource{
+            "dataVolume": {
+                Base:   dv,
+                Managed: true,
+            },
+            "pvc": {
+                Base:   pvc,
+                Managed: true,
+            },
+        },
+    }, nil
+}</code></pre>
+
+<h3>Using <code>patchAndSync</code> for DataVolume readiness</h3>
+
+<p>The composition function must wait for the DataVolume to reach <code>Ready</code> before the VirtualMachine can be created. Use the composition runtime's <code>patchAndSync</code> pattern to poll the DV status:</p>
+
+<pre><code>// After creating the DataVolume, patch the XR status to reflect DV state
+dv := &cdiv1beta1.DataVolume{}
+if err := r.Client.Get(ctx, client.ObjectKey{Name: dvName, Namespace: ns}, dv); err != nil {
+    return nil, fmt.Errorf("get datavolume: %w", err)
+}
+
+// Set XR condition based on DV phase
+switch dv.Status.Phase {
+case cdiv1beta1.Ready:
+    // DV is ready — XR can proceed to create the VirtualMachine
+    xr.Status.AtProvider.DataVolumeReady = true
+case cdiv1beta1.Failed, cdiv1beta1.Timeout:
+    // Mark XR as errored
+    xr.Status.AtProvider.ErrorMessage = fmt.Sprintf(
+        "DataVolume failed: %s", dv.Status.Phase,
+    )
+default:
+    // Still provisioning — XR stays in Creating
+    xr.Status.AtProvider.DataVolumeProgress = dv.Status.Progress
+}</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Composition ordering</div>
+  <p>The composition function should create resources in this order: (1) DataVolume, (2) PVC (with <code>dataSource</code> pointing to the DV), (3) VirtualMachine. The PVC's <code>dataSource</code> field tells KubeVirt/CDI to wait for the DataVolume to complete before the VM tries to use the disk. This is the critical dependency chain.</p>
+</div>
+
+<h3>Composition XRD schema for storage</h3>
+
+<p>Extend your XRD to include storage configuration:</p>
+
+<pre><code>spec:
+  connectionSecretKeys:
+    - sshPublicKey
+  descriptions:
+    name: VM storage configuration
+  properties:
+    baseImageRef:
+      description: Reference to the base image to clone from
+      properties:
+        pvcName:
+          type: string
+        pvcNamespace:
+          type: string
+      type: object
+    diskSize:
+      description: Size of the VM disk
+      type: string
+      pattern: "^\\d+(Gi|Ti)$"
+    storageClass:
+      description: OpenShift storage class for VM disk
+      type: string
+      enum:
+        - ocs-storagecluster-rbd
+        - ocs-storagecluster-cephfs
+        - local-storage
+        - vsc-viper-5a-fast
+    additionalDisks:
+      description: Additional disks beyond the boot disk
+      items:
+        properties:
+          size:
+            type: string
+          storageClass:
+            type: string
+          mountPath:
+            type: string
+        type: object
+      type: array</code></pre>
+
+<h2 id="sec-5">5. Storage Class Selection in Compositions</h2>
+
+<p>Not all VMs need the same storage class. The composition should support selecting a storage class based on the VM's workload profile. This can be driven by the XRD schema or by labels on the VirtualMachineClaim.</p>
+
+<h3>Performance profiles</h3>
+
+<pre><code># Low-tier VMs (dev/test) — use shared CephFS
+storageClass: ocs-storagecluster-cephfs
+reclaimPolicy: Delete
+
+# Standard VMs (production workloads) — use Ceph RBD
+storageClass: ocs-storagecluster-rbd
+reclaimPolicy: Retain
+
+# High-performance VMs (databases) — use local storage
+storageClass: local-storage
+reclaimPolicy: Retain
+
+# Enterprise VMs (domain controllers) — use enterprise SAN
+storageClass: vsc-viper-5a-fast
+reclaimPolicy: Retain</code></pre>
+
+<h3>Composition function: auto-select storage class</h3>
+
+<pre><code>func selectStorageClass(xr *crossplanev1.CompositeResource) string {
+    // Explicit override takes precedence
+    if xr.Spec.StorageClass != "" {
+        return xr.Spec.StorageClass
+    }
+
+    // Auto-select based on labels
+    labels := xr.GetLabels()
+    switch {
+    case labels["workload-type"] == "database":
+        return "local-storage"
+    case labels["workload-type"] == "enterprise":
+        return "vsc-viper-5a-fast"
+    case labels["tier"] == "production":
+        return "ocs-storagecluster-rbd"
+    default:
+        return "ocs-storagecluster-cephfs"
+    }
+}</code></pre>
+
+<div class="callout green">
+  <div class="callout-label">Best practice</div>
+  <p>Let the claim author override the storage class via the XRD schema, but provide sensible defaults in the composition function. This gives teams flexibility while preventing accidental use of the wrong storage class for production workloads.</p>
+</div>
+
+<h2 id="sec-6">6. Multi-DC Storage Considerations</h2>
+
+<p>In your 3-DC topology (from <code>docs/topology-multi-dc-ove-clusters.md</code>), storage adds significant complexity:</p>
+
+<h3>Per-cluster storage independence</h3>
+
+<p>Each OVE cluster has its own storage infrastructure (Ceph cluster, NFS server, or SAN). A <code>DataVolume</code> created on cluster A cannot be consumed by a VM on cluster B. This means:</p>
+
+<ul>
+  <li><strong>Base images must exist on every cluster.</strong> You need a base image pipeline that pushes images to each cluster's CDI upload proxy, or a shared image registry that each cluster pulls from.</li>
+  <li><strong>Storage classes differ per cluster.</strong> Cluster A might have <code>ocs-storagecluster-rbd</code> while cluster B has <code>vsc-viper-5a-fast</code>. The composition function must be cluster-aware.</li>
+  <li><strong>Storage class names may differ.</strong> Don't hardcode storage class names — use a label or annotation on the cluster to select the appropriate class.</li>
+</ul>
+
+<h3>Image distribution strategy</h3>
+
+<pre><code># Strategy 1: Shared OCI registry (recommended)
+# Each cluster pulls base images from the same registry
+# The composition function references the image by digest
+# CDI clones from a local PVC that was pre-populated
+
+# Strategy 2: CDI upload to each cluster
+# Push the base image to each cluster's CDI upload proxy
+# Requires authenticated access to each cluster's upload endpoint
+
+# Strategy 3: DataImportCron (CDI scheduled imports)
+# Schedule periodic imports of base images to each cluster
+# Automates the "keep base images up to date" problem</code></pre>
+
+<h3>DataImportCron</h3>
+
+<p>CDI's <code>DataImportCron</code> CRD automates periodic image imports. This is the recommended approach for keeping base images fresh across multiple clusters:</p>
+
+<pre><code>apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataImportCron
+metadata:
+  name: dicron-centos-stream-9
+  namespace: vm-system
+spec:
+  source:
+    http:
+      url: "https://example.com/images/centos-stream-9-latest.qcow2"
+  schedule: "0 2 1 * *"  # 2 AM on the 1st of every month
+  storageClass: ocs-storagecluster-rbd
+  storage:
+    requests:
+      storage: 20Gi
+  retentionPolicy: KeepLast 5
+  template:
+    spec:
+      storage:
+        requests:
+          storage: 20Gi
+        storageClassName: ocs-storagecluster-rbd</code></pre>
+
+<p>When the cron fires, CDI downloads the image and stores it in a PVC. The composition function then clones from this pre-populated PVC instead of downloading on-demand, which is much faster and more reliable.</p>
+
+<div class="callout orange">
+  <div class="callout-label">Multi-DC caveat</div>
+  <p>DataImportCron runs <em>per cluster</em>. You need one <code>DataImportCron</code> per base image per cluster. In a 3-DC topology with 9 clusters, that's 27 DataImportCrons for a single base image. Automate this with a composition that creates DataImportCrons on each target cluster, or use a central management cluster that pushes images to all clusters.</p>
+</div>
+
+<h2 id="sec-7">7. Operational Concerns</h2>
+
+<h3>Monitoring DataVolumes</h3>
+
+<p>Watch for these failure modes:</p>
+
+<table>
+  <tr>
+    <th>Problem</th>
+    <th>Symptom</th>
+    <th>Fix</th>
+  </tr>
+  <tr>
+    <td>CDI resource exhaustion</td>
+    <td>DV stuck in <code>Pending</code></td>
+    <td>Scale CDI deployment, increase <code>podResourceConstraints</code></td>
+  </tr>
+  <tr>
+    <td>Network timeout during import</td>
+    <td>DV in <code>Failed</code> with timeout error</td>
+    <td>Increase <code>spec.timeout</code>, check network to image source</td>
+  </tr>
+  <tr>
+    <td>Storage class not found</td>
+    <td>DV in <code>Failed</code> with "storageclass not found"</td>
+    <td>Verify storage class exists on target cluster</td>
+  </tr>
+  <tr>
+    <td>Insufficient storage capacity</td>
+    <td>PVC stuck in <code>Pending</code>, no PV provisioned</td>
+    <td>Check storage capacity, expand storage cluster</td>
+  </tr>
+  <tr>
+    <td>Image format unsupported</td>
+    <td>DV in <code>Failed</code> with "unsupported format"</td>
+    <td>Convert image to qcow2 or raw format</td>
+  </tr>
+</table>
+
+<h3>Storage capacity planning</h3>
+
+<pre><code># Check CDI pod resource usage
+oc top pods -n cdi
+
+# Check PVC usage across namespaces
+oc get pvc -A --sort-by=.spec.resources.requests.storage
+
+# Check storage cluster capacity (Ceph)
+ceph df
+
+# Check CDI upload proxy health
+oc get pods -n cdi | grep upload
+
+# Monitor DataVolume phases
+oc get datavolume -A --sort-by=.status.phase</code></pre>
+
+<h3>Snapshot and backup workflows</h3>
+
+<p>For production VMs, implement a snapshot-and-restore workflow:</p>
+
+<pre><code># 1. Create a VolumeSnapshot of the VM's disk
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: vm-snapshot-backup
+  namespace: vm-system
+spec:
+  volumeSnapshotClassName: csi-rbdplugin-snapclass
+  source:
+    persistentVolumeClaimName: vm-disk-my-vm
+
+# 2. Use the snapshot as a DataVolume source for cloning
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: dv-from-snapshot
+spec:
+  source:
+    snapshot:
+      name: vm-snapshot-backup
+      namespace: vm-system
+      kind: VolumeSnapshot
+  storage:
+    requests:
+      storage: 20Gi
+    storageClassName: ocs-storagecluster-rbd
+
+# 3. Or use KubeVirt VirtualMachineSnapshot (full VM snapshot)
+apiVersion: kubevirt.io/v1
+kind: VirtualMachineSnapshot
+metadata:
+  name: full-vm-snapshot
+  namespace: vm-system
+spec:
+  source:
+    apiGroup: kubevirt.io
+    kind: VirtualMachine
+    name: my-vm</code></pre>
+
+<div class="callout green">
+  <div class="callout-label">Integration point</div>
+  <p>This connects to the "Disaster recovery" topic from the roadmap. A Crossplane composition could manage a <code>VirtualMachineSnapshot</code> CRD that triggers periodic snapshots, and a separate composition could restore from a snapshot when a VM is corrupted. The <code>VirtualMachineSnapshot</code> CRD captures the entire VM state — disk, memory (optional), and configuration — making it more comprehensive than a bare <code>VolumeSnapshot</code>.</p>
+</div>
+
+<h3>Reclaim policy enforcement</h3>
+
+<p>Enforce <code>Retain</code> reclaim policy for production storage classes. Add a validation webhook or an OPA/Gatekeeper policy:</p>
+
+<pre><code># OPA/Gatekeeper constraint
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sStorageClass
+metadata:
+  name: require-retain-policy
+spec:
+  match:
+    kinds:
+      - apiGroups: ["storage.k8s.io"]
+        kinds: ["StorageClass"]
+  parameters:
+    reclaimPolicy: Retain</code></pre>
+
+<p>In a Crossplane composition, you can also enforce this by explicitly setting the reclaim policy in the composed PV:</p>
+
+<pre><code># Composition function: ensure reclaim policy
+pv := &corev1.PersistentVolume{
+    Spec: corev1.PersistentVolumeSpec{
+        PersistentVolumeReclaimPolicy: corev1.PersistentVolumeRetain,
+        // ...
+    },
+}</code></pre>
+
+<h2 id="sec-8">8. Summary</h2>
+
+<p>Storage for VMs in a Crossplane + KubeVirt stack is a multi-layered problem:</p>
+
+<ul>
+  <li><strong>StorageClass</strong> defines the backing storage (Ceph RBD, NFS, local, enterprise SAN) and its behavior (reclaim policy, expansion support, volume binding mode)</li>
+  <li><strong>PVC</strong> is the storage claim that the VM references — it goes through a 6-phase lifecycle from Pending to Bound to Released</li>
+  <li><strong>DataVolume</strong> is the KubeVirt abstraction that populates the PVC with a disk image (from a URL, a clone, a snapshot, or an upload)</li>
+  <li><strong>CDI</strong> is the runtime engine that executes DataVolume operations — it consumes CPU/memory and can become a bottleneck</li>
+  <li><strong>Crossplane composition</strong> orchestrates the dependency chain: DataVolume → PVC → VirtualMachine, with the composition function polling DV readiness</li>
+  <li><strong>DataImportCron</strong> automates base image updates per cluster, critical for multi-DC deployments</li>
+</ul>
+
+<p>The most common failure modes are CDI resource exhaustion (stuck DataVolumes), wrong reclaim policies (accidental data loss), and storage class mismatches across clusters (multi-DC). All three are preventable with proper composition design and operational monitoring.</p>
+
+<h2>Where this fits</h2>
+
+<p>This explainer connects the storage layer to everything else in the stack:</p>
+
+<ul>
+  <li><strong>Explainer 006</strong> (VM Workload Dev) — introduced the <code>VirtualMachine</code> CRD and its <code>spec.template.spec.domain.devices.disks</code> field, but deferred the storage details to this explainer</li>
+  <li><strong>Explainer 007</strong> (XRD & Composition Deep Dive) — the composition function shown here is a concrete instantiation of the patterns introduced there</li>
+  <li><strong>Explainer 008</strong> (OS Image Management) — the <code>BaseImage</code> CRD feeds into the DataVolume's <code>dataSource</code>; this explainer shows how</li>
+  <li><strong>Explainer 011</strong> (Multi-Cluster VM Placement) — storage class selection and base image distribution are cluster-specific concerns</li>
+  <li><strong>Future: Disaster Recovery</strong> — VolumeSnapshots and VirtualMachineSnapshots are the foundation for backup/restore workflows</li>
+</ul>
+
+<p>With storage covered, the remaining topics from the roadmap are <strong>monitoring & observability</strong> (tracking DV health, storage capacity, CDI metrics) and <strong>upgrades & lifecycle</strong> (provider upgrades, storage class migration, CDI version compatibility). These are operational topics that become relevant once the provisioning pipeline is working end-to-end.</p>
+
+<button class="answer-toggle" onclick="toggleAnswer('answers-013')">Show Exercise Answers ▾</button>
+<div id="answers-013" class="answer-panel" style="display:none;">
+  <h3>Exercise 1: Storage class selection</h3>
+  <p><strong>Question:</strong> Your team wants to provision a PostgreSQL VM and a development test VM. Which storage classes would you use for each, and why?</p>
+  <p><strong>Answer:</strong> PostgreSQL → <code>local-storage</code> or <code>vsc-viper-5a-fast</code> (low latency, high IOPS for database workloads). Development test VM → <code>ocs-storagecluster-cephfs</code> (shared storage, lower cost, <code>Delete</code> reclaim policy is acceptable for disposable workloads).</p>
+
+  <h3>Exercise 2: DataVolume lifecycle</h3>
+  <p><strong>Question:</strong> A DataVolume is stuck in <code>Pending</code> for 30 minutes. What are the top 3 things to check?</p>
+  <p><strong>Answer:</strong> (1) CDI pod resource exhaustion — check <code>oc top pods -n cdi</code> and CDI deployment replicas. (2) Storage class not found — verify the storage class exists on the target cluster. (3) PVC provisioning failure — check if the underlying storage provisioner (Ceph, NFS, etc.) has capacity and is healthy.</p>
+
+  <h3>Exercise 3: Reclaim policy enforcement</h3>
+  <p><strong>Question:</strong> A developer accidentally deleted a VirtualMachineClaim for a production VM. The storage class had <code>Delete</code> reclaim policy. What happened, and how do you prevent this?</p>
+  <p><strong>Answer:</strong> The PV and underlying storage were deleted — all data is gone. To prevent: (1) Set <code>Retain</code> reclaim policy on production storage classes. (2) Implement a composition-level <code>deletionPolicy: Orphan</code> that detaches the PVC from the XR before the XR is deleted. (3) Add OPA/Gatekeeper constraints that reject <code>Delete</code> reclaim policy on production storage classes.</p>
+</div>
+
+<script>
+function toggleAnswer(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+
+</body>
+</html>
