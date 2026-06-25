@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enrichment Pattern — External Controllers for Crossplane XRs</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  h4 {
+    font-size: 1rem;
+    color: var(--accent-purple);
+    margin-top: 1.2rem;
+    margin-bottom: 0.5rem;
+  }
+  p { margin-bottom: 1rem; }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9em;
+  }
+  :not(pre) > code {
+    background: var(--surface);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+  .note {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .note-title {
+    font-weight: bold;
+    color: var(--accent);
+    margin-bottom: 0.25rem;
+  }
+  .warning {
+    background: var(--surface);
+    border-left: 3px solid var(--accent-orange);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .warning-title {
+    font-weight: bold;
+    color: var(--accent-orange);
+    margin-bottom: 0.25rem;
+  }
+  .danger {
+    background: var(--surface);
+    border-left: 3px solid var(--accent-red);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .danger-title {
+    font-weight: bold;
+    color: var(--accent-red);
+    margin-bottom: 0.25rem;
+  }
+  .exercise {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    margin: 1.5rem 0;
+  }
+  .exercise-title {
+    font-weight: bold;
+    color: var(--accent-green);
+    margin-bottom: 0.5rem;
+  }
+  .collapsible {
+    margin: 1rem 0;
+  }
+  .collapsible summary {
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--accent-green);
+    font-weight: bold;
+    user-select: none;
+  }
+  .collapsible summary:hover {
+    background: var(--border);
+  }
+  .collapsible .answer {
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 0 0 6px 6px;
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .toc h3 {
+    margin-top: 0;
+    color: #f0f6fc;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc li {
+    padding: 0.2rem 0;
+  }
+  .toc li a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .toc li a:hover {
+    text-decoration: underline;
+  }
+  .step-number {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--bg);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 28px;
+    font-weight: bold;
+    font-size: 0.85rem;
+    margin-right: 0.5rem;
+  }
+  .flow-arrow {
+    text-align: center;
+    font-size: 1.5rem;
+    color: var(--accent);
+    margin: 0.5rem 0;
+  }
+  .flow-box {
+    display: inline-block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    margin: 0.25rem;
+    font-size: 0.85rem;
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+  }
+  th {
+    background: var(--surface);
+    color: #f0f6fc;
+    font-weight: bold;
+  }
+  td { background: var(--code-bg); }
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.5em;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  .badge-yaml { background: #1a3a5c; color: #79c0ff; }
+  .badge-controller { background: #2d1b4e; color: #bc8cff; }
+  .badge-argocd { background: #1b3a1b; color: #7ee787; }
+  .badge-verify { background: #3a2d1b; color: #ffa657; }
+  .architecture {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .architecture-title {
+    font-weight: bold;
+    color: #f0f6fc;
+    margin-bottom: 0.75rem;
+    text-align: center;
+  }
+  .diagram {
+    text-align: center;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--accent-cyan);
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .comparison > div {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  .comparison h4 {
+    margin-top: 0;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>Enrichment Pattern — External Controllers for Crossplane XRs</h1>
+
+<p>The enrichment pattern uses <strong>external controllers</strong> — Kubernetes controllers that are not part of Crossplane's core reconciliation loop — to add data, metadata, and capabilities to Composite Resources (XRs) after the Composition has rendered its managed resources. This pattern bridges the gap between what Crossplane provisions and what the real world requires: DNS names, IP addresses, monitoring endpoints, security labels, service discovery entries, and more.</p>
+
+<p>This explainer covers the <strong>why</strong>, <strong>how</strong>, and <strong>where</strong> of enrichment — from the conceptual model through concrete implementations with external controllers that enrich XRs for VM workloads.</p>
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ul>
+    <li><a href="#motivation">Motivation: Why Enrichment?</a></li>
+    <li><a href="#conceptual-model">Conceptual Model</a></li>
+    <li><a href="#pattern-variants">Pattern Variants</a></li>
+    <li><a href="#enrichment-sources">Enrichment Sources</a></li>
+    <li><a href="#enrichment-targets">Enrichment Targets</a></li>
+    <li><a href="#implementation">Implementation: Building an Enrichment Controller</a></li>
+    <li><a href="#concrete-examples">Concrete Examples</a></li>
+    <li><a href="#argocd-integration">ArgoCD Integration</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+    <li><a href="#exercise">Exercise</a></li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="motivation">Motivation: Why Enrichment?</h2>
+
+<p>Crossplane's Composition renders managed resources — a VirtualMachine, a DataVolume, a PVC. But a production-ready VM workload needs more than those three CRs. It needs:</p>
+
+<ul style="margin: 0.5rem 0 1rem 1.5rem;">
+  <li>A DNS record pointing to the VM's IP address</li>
+  <li>A monitoring endpoint registered in Prometheus</li>
+  <li>A network policy allowing specific traffic flows</li>
+  <li>A security scan result tagged on the XR</li>
+  <li>A service discovery entry in Consul or etcd</li>
+  <li>A certificate from Vault for TLS termination</li>
+</ul>
+
+<p>These resources are <strong>external</strong> to the Composition. They live in separate controllers, separate namespaces, or even separate clusters. The enrichment pattern provides the mechanism to wire them into the XR lifecycle.</p>
+
+<div class="architecture">
+  <div class="architecture-title">Without enrichment</div>
+  <div class="diagram">
+  Claim ──▶ XR ──▶ Composition ──▶ VirtualMachine
+                                    ──▶ DataVolume
+                                    ──▶ PVC
+  </div>
+  <p style="text-align:center; color: var(--text-muted); margin: 0.5rem 0;">The VM runs, but nothing knows about it. No DNS, no monitoring, no security tags.</p>
+</div>
+
+<div class="architecture">
+  <div class="architecture-title">With enrichment</div>
+  <div class="diagram">
+  Claim ──▶ XR ──▶ Composition ──▶ VirtualMachine
+                                    ──▶ DataVolume
+                                    ──▶ PVC
+                                    │
+                                    │  (enrichment)
+                                    ▼
+                       ┌─────────────────────────┐
+                       │  External Controllers    │
+                       │  ┌───────────────────┐   │
+                       │  │ DNS Controller     │──▶ A record → vm-01.infra.local
+                       │  └───────────────────┘   │
+                       │  ┌───────────────────┐   │
+                       │  │ Monitoring Ctrl    │──▶ ServiceMonitor → Prometheus
+                       │  └───────────────────┘   │
+                       │  ┌───────────────────┐   │
+                       │  │ Security Ctrl     │──▶ VulnerabilityReport → XR.status
+                       │  └───────────────────┘   │
+                       └─────────────────────────┘
+  </div>
+  <p style="text-align:center; color: var(--text-muted); margin: 0.5rem 0;">The XR is enriched with DNS, monitoring, and security data — all managed by external controllers.</p>
+</div>
+
+<h3>The core problem enrichment solves</h3>
+
+<p>Crossplane's Composition is great at <strong>provisioning</strong> — creating the resources it knows about. But it is not designed for:</p>
+
+<table>
+  <tr>
+    <th>What Crossplane does well</th>
+    <th>What Crossplane doesn't do well</th>
+  </tr>
+  <tr>
+    <td>Creating Kubernetes-native resources</td>
+    <td>Creating external DNS records (Route53, Cloudflare)</td>
+  </tr>
+  <tr>
+    <td>Managing CRDs it defines</td>
+    <td>Integrating with services outside the cluster</td>
+  </tr>
+  <tr>
+    <td>Declarative resource rendering</td>
+    <td>Fetching data from external APIs (IPAM, PKI, CMDB)</td>
+  </tr>
+  <tr>
+    <td>Reconciling managed resources</td>
+    <td>Enriching XRs with cross-cutting concerns</td>
+  </tr>
+</table>
+
+<p>Enrichment fills this gap by delegating cross-cutting concerns to specialized external controllers while keeping the XR as the single source of truth.</p>
+
+<!-- ============================================================ -->
+<h2 id="conceptual-model">Conceptual Model</h2>
+
+<p>The enrichment pattern has three roles:</p>
+
+<h3>1. The Enrichment Source (the XR)</h3>
+<p>The XR is the <strong>source of truth</strong> for what needs enriching. It provides:</p>
+<ul style="margin: 0.5rem 0 1rem 1.5rem;">
+  <li><strong>Labels</strong> — selectors that tell controllers which XRs to watch</li>
+  <li><strong>Annotations</strong> — configuration hints for enrichment controllers</li>
+  <li><strong>Status fields</strong> — data that external controllers write back</li>
+  <li><strong>Spec fields</strong> — parameters that determine what enrichment is needed</li>
+</ul>
+
+<h3>2. The Enrichment Controller</h3>
+<p>The controller is a <strong>Kubernetes controller</strong> (not necessarily a Crossplane provider) that:</p>
+<ul style="margin: 0.5rem 0 1rem 1.5rem;">
+  <li>Watches for XRs (or their managed resources) matching specific labels</li>
+  <li>Reads XR spec/status to determine what enrichment is needed</li>
+  <li>Creates or manages <strong>external resources</strong> (DNS records, certificates, etc.)</li>
+  <li>Writes enrichment results <strong>back to the XR</strong> (status, annotations, or a dedicated enrichment CR)</li>
+</ul>
+
+<h3>3. The Enrichment Target (what gets created)</h3>
+<p>The target is the <strong>external resource or data</strong> that the controller creates:</p>
+<ul style="margin: 0.5rem 0 1rem 1.5rem;">
+  <li><strong>CRDs</strong> — DNSRecord, ServiceMonitor, Certificate, NetworkPolicy</li>
+  <li><strong>XR status fields</strong> — enriched IP, DNS name, scan results</li>
+  <li><strong>Connection secrets</strong> — enriched with externally-obtained data</li>
+  <li><strong>Annotations</strong> — metadata tags from external systems</li>
+</ul>
+
+<div class="note">
+  <div class="note-title">Key distinction: Enrichment vs. Composition rendering</div>
+  <p>A Composition renders resources <strong>directly</strong> — the VirtualMachine, DataVolume, PVC are created by the Composition's patchAndTransform. Enrichment is <strong>indirect</strong> — the external controller observes the XR and creates supplementary resources on its own. The Composition does not create the DNS record; the DNS controller does.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="pattern-variants">Pattern Variants</h2>
+
+<p>There are three main ways enrichment manifests in Crossplane, each with different trade-offs:</p>
+
+<div class="comparison">
+  <div>
+    <h4>Variant 1: Status Enrichment</h4>
+    <p>External controllers write data directly into the XR's <code>status</code> subresource. The XR's XRD must define the status fields the controller is allowed to write.</p>
+    <pre><code># External controller writes:
+status:
+  enrichedIP: "10.0.1.42"
+  dnsName: "vm-01.infra.local"
+  scanStatus: "clean"</code></code></pre>
+    <p><strong>Best for:</strong> Simple data that the Claim consumer needs to read.</p>
+  </div>
+  <div>
+    <h4>Variant 2: Resource Enrichment</h4>
+    <p>External controllers create <strong>separate CRs</strong> that reference the XR via cross-references. The XR doesn't hold the data; the external controller manages it.</p>
+    <pre><code># Controller creates:
+apiVersion: dns.infra.example.com/v1
+kind: DNSRecord
+metadata:
+  name: vm-01-dns
+spec:
+  xrRef: xrvirtualmachine/webserver-01
+  recordName: vm-01.infra.local</code></code></pre>
+    <p><strong>Best for:</strong> Resources with their own lifecycle (TTL, propagation, external API calls).</p>
+  </div>
+  <div>
+    <h4>Variant 3: Connection Secret Enrichment</h4>
+    <p>External controllers inject enriched data into the <strong>connection secret</strong> that Crossplane writes to the Claim's namespace. The secret contains both Crossplane-managed data and externally-enriched data.</p>
+    <pre><code># Connection secret contains:
+data:
+  endpoint: "vm-01.infra.local"    # from DNS controller
+  ip: "10.0.1.42"                  # from IPAM controller
+  ca-cert: "LS0t..."               # from PKI controller
+  password: "c2VjcmV0"             # from Crossplane</code></code></pre>
+    <p><strong>Best for:</strong> Passing enriched data to workload pods that consume the resource.</p>
+  </div>
+</div>
+
+<h3>When to use each variant</h3>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Recommended variant</th>
+    <th>Reason</th>
+  </tr>
+  <tr>
+    <td>VM IP address for the Claim consumer</td>
+    <td>Status enrichment</td>
+    <td>Simple read; no separate lifecycle</td>
+  </tr>
+  <tr>
+    <td>DNS record with TTL and propagation tracking</td>
+    <td>Resource enrichment</td>
+    <td>Needs its own CRD and reconciliation</td>
+  </tr>
+  <tr>
+    <td>Connection data for a consuming application</td>
+    <td>Connection secret enrichment</td>
+    <td>Secret is the natural delivery mechanism</td>
+  </tr>
+  <tr>
+    <td>Security scan results visible in the XR</td>
+    <td>Status enrichment</td>
+    <td>Queryable; part of XR observability</td>
+  </tr>
+  <tr>
+    <td>Certificate management with external PKI</td>
+    <td>Resource enrichment</td>
+    <td>Certificates have their own lifecycle (renewal, rotation)</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="enrichment-sources">Enrichment Sources</h2>
+
+<p>External controllers need to know <strong>when to act</strong> and <strong>what to act on</strong>. Here are the common triggers:</p>
+
+<h3>Trigger 1: Label-based selection</h3>
+
+<p>The most common approach. The Composition adds a specific label to the XR, and the external controller watches for that label:</p>
+
+<pre><code># Composition adds this label to the XR:
+metadata:
+  labels:
+    infra.example.com/enrich: "dns,monitoring,security"
+
+# External controller watches for this label:
+# In the controller's reconciliation loop:
+xrList := &infrav1.XRVirtualMachineList{}
+client.List(ctx, xrList, client.MatchingLabels{
+    "infra.example.com/enrich": "dns",
+})</code></code></pre>
+
+<h3>Trigger 2: Annotation-based configuration</h3>
+
+<p>Annotations tell the controller <strong>how</strong> to enrich, not just <strong>whether</strong>:</p>
+
+<pre><code>metadata:
+  annotations:
+    infra.example.com/dns-zone: "infra.local"
+    infra.example.com/dns-ttl: "300"
+    infra.example.com/monitoring-endpoint: "/metrics"
+    infra.example.com/security-scan: "required"</code></code></pre>
+
+<h3>Trigger 3: Status-based triggering</h3>
+
+<p>The controller watches for the XR to reach a specific condition before enriching. For example, a DNS controller waits for the VirtualMachine to be <code>Running</code> before creating an A record:</p>
+
+<pre><code># Controller checks XR status before enriching:
+if xr.Status.Conditions[0].Type == "Ready" &&
+   xr.Status.Conditions[0].Status == "True" {
+    // Create DNS record
+} else {
+    // Delete DNS record if VM is deleted
+}</code></code></pre>
+
+<h3>Trigger 4: Cross-reference from managed resources</h3>
+
+<p>The controller watches the <strong>managed resources</strong> created by the Composition (VirtualMachine, DataVolume) and enriches based on their state. This is the most robust trigger because it doesn't depend on XR labels:</p>
+
+<pre><code># Controller watches VirtualMachine CRs created by Crossplane:
+vmList := &kubevirtv1.VirtualMachineList{}
+client.List(ctx, vmList, client.MatchingLabels{
+    "crossplane.io/composite": "xrvirtualmachine/webserver-01",
+})</code></code></pre>
+
+<div class="note">
+  <div class="note-title">Crossplane's managed resource label</div>
+  <p>Crossplane automatically adds <code>crossplane.io/composite: &lt;group&gt;/&lt;kind&gt;/&lt;name&gt;</code> to every managed resource it creates. External controllers can use this label to find which XR a managed resource belongs to — no custom labels needed.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="enrichment-targets">Enrichment Targets</h2>
+
+<p>Where does the enriched data go? The target determines how the Claim consumer accesses it.</p>
+
+<h3>Target 1: XR Status (most common)</h3>
+
+<p>The XRD must declare the status fields the external controller is authorized to write:</p>
+
+<pre><code>spec:
+  versions:
+    - name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            status:
+              type: object
+              properties:
+                enrichedDNS:
+                  type: string
+                  description: DNS name assigned by external DNS controller
+                enrichedIP:
+                  type: string
+                  description: IP address assigned by IPAM controller
+                securityScan:
+                  type: object
+                  properties:
+                    status:
+                      type: string
+                      enum: [pending, scanning, clean, vulnerable]
+                    findings:
+                      type: integer
+                    lastScan:
+                      type: string
+                      format: date-time</code></code></pre>
+
+<p>The external controller writes to <code>/status</code> using a <code>StatusWriter</code>:</p>
+
+<pre><code>xr := &infrav1.XRVirtualMachine{}
+client.get(ctx, types.NamespacedName{Name: name}, xr)
+
+xr.Status.EnrichedDNS = "vm-01.infra.local"
+xr.Status.EnrichedIP = "10.0.1.42"
+xr.Status.SecurityScan.Status = "clean"
+
+client.Status().Update(ctx, xr)</code></code></pre>
+
+<h3>Target 2: XR Annotations</h3>
+
+<p>For metadata that shouldn't be part of the schema (dynamic, unstructured data):</p>
+
+<pre><code>metadata:
+  annotations:
+    # Enrichment controllers write here:
+    enriched.dns/record-id: "abc-123"
+    enriched.security/scan-hash: "sha256:deadbeef"
+    enriched.monitoring/sla-class: "gold"</code></code></pre>
+
+<h3>Target 3: Dedicated Enrichment CRs</h3>
+
+<p>For complex enrichment that needs its own lifecycle, the controller creates a CR that references the XR:</p>
+
+<pre><code>apiVersion: enriched.infra.example.com/v1
+kind: XREnrichment
+metadata:
+  name: webserver-01-enrichment
+spec:
+  xrRef:
+    apiVersion: infra.example.com/v1alpha1
+    kind: XRVirtualMachine
+    name: webserver-01
+  dns:
+    recordName: vm-01.infra.local
+    recordType: A
+    ttl: 300
+  monitoring:
+    endpoint: /metrics
+    port: 8080
+    scrapeInterval: 15s
+  security:
+    scanStatus: clean
+    lastScan: "2024-01-15T10:30:00Z"
+    vulnerabilities: 0</code></code></pre>
+
+<h3>Target 4: Connection Secrets</h3>
+
+<p>External controllers can inject data into the connection secret that Crossplane creates:</p>
+
+<pre><code># Crossplane creates the base secret:
+apiVersion: v1
+kind: Secret
+metadata:
+  name: crossplane-kubevirt-webserver-01
+type: Opaque
+data:
+  kubeconfig: &lt;base64&gt;
+
+# External controller enriches it:
+kubectl patch secret crossplane-kubevirt-webserver-01 \
+  --type=merge \
+  -p '{"data":{"dns-name":"dm0tMDEuaW5mcmEubG9jYWw=","ip-address":"MTAuMC4xLjQy="}}'</code></code></pre>
+
+<div class="warning">
+  <div class="warning-title">Connection secret write permissions</div>
+  <p>External controllers need <code>update</code> permission on the connection secret. If the secret is in <code>crossplane-system</code> (the default), the controller needs a ClusterRoleBinding or a ServiceAccount with appropriate RBAC. If the secret is in the Claim's namespace, the controller needs namespace-level permissions.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="implementation">Implementation: Building an Enrichment Controller</h2>
+
+<p>Let's walk through building a concrete enrichment controller: a <strong>DNS enrichment controller</strong> that creates DNS A records when VMs become ready and deletes them when VMs are deleted.</p>
+
+<h3>Step 1: Define the enrichment scope</h3>
+
+<p>The controller will:</p>
+<ul style="margin: 0.5rem 0 1rem 1.5rem;">
+  <li>Watch <code>VirtualMachine</code> CRs created by Crossplane (via the <code>crossplane.io/composite</code> label)</li>
+  <li>Create DNS A records when the VM reaches <code>Running</code> phase</li>
+  <li>Delete DNS records when the VM is deleted</li>
+  <li>Write the DNS name back to the XR's status</li>
+</ul>
+
+<h3>Step 2: Controller reconciliation loop</h3>
+
+<pre><code>package controller
+
+import (
+    "context"
+    "fmt"
+
+    corev1 "k8s.io/api/core/v1"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/apimachinery/pkg/runtime"
+    "k8s.io/apimachinery/pkg/types"
+    "sigs.k8s.io/controller-runtime"
+    "sigs.k8s.io/controller-runtime/pkg/builder"
+    "sigs.k8s.io/controller-runtime/pkg/client"
+    "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+    "sigs.k8s.io/controller-runtime/pkg/handler"
+    logf "sigs.k8s.io/controller-runtime/pkg/log"
+    "sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+    kubevirtv1 "github.com/kubevirt/kubevirt/pkg/apis/core/v1"
+    infrav1 "github.com/org/infra-api/api/infra.example.com/v1alpha1"
+)
+
+// DNSReconciler watches VirtualMachine CRs and creates DNS records
+type DNSReconciler struct {
+    client.Client
+    Scheme *runtime.Scheme
+    DNSZone string
+    TTL    int32
+}
+
+func (r *DNSReconciler) Reconcile(ctx context.Context, req controller.Request) (controller.Result, error) {
+    log := logf.FromContext(ctx)
+
+    // 1. Get the VirtualMachine
+    vm := &kubevirtv1.VirtualMachine{}
+    if err := r.Get(ctx, req.NamespacedName, vm); err != nil {
+        return controller.Result{}, client.IgnoreNotFound(err)
+    }
+
+    // 2. Find the parent XR via the Crossplane label
+    xrName, found := vm.Labels["crossplane.io/composite"]
+    if !found {
+        // Not a Crossplane-managed VM, skip
+        return controller.Result{}, nil
+    }
+
+    // Parse the XR reference: "xrvirtualmachine/webserver-01"
+    parts := strings.Split(xrName, "/")
+    if len(parts) != 2 {
+        log.Error(fmt.Errorf("invalid crossplane.io/composite label"), "skipping VM", "vm", req.Name)
+        return controller.Result{}, nil
+    }
+
+    // 3. Get the XR
+    xr := &infrav1.XRVirtualMachine{}
+    if err := r.Get(ctx, types.NamespacedName{Name: parts[1]}, xr); err != nil {
+        return controller.Result{}, client.IgnoreNotFound(err)
+    }
+
+    // 4. Check if the XR is ready
+    if !isXRReady(xr) {
+        // Delete DNS record if it exists
+        r.ensureDNSRecord(ctx, xr, vm, false)
+        return controller.Result{}, nil
+    }
+
+    // 5. Determine the VM's IP address
+    vmIP := getVMIP(vm)
+    if vmIP == "" {
+        return controller.Result{RequeueAfter: 10 * time.Second}, nil
+    }
+
+    // 6. Create or update the DNS record
+    r.ensureDNSRecord(ctx, xr, vm, true)
+
+    // 7. Write enriched DNS name back to XR status
+    dnsName := fmt.Sprintf("%s.%s", parts[1], r.DNSZone)
+    xr.Status.EnrichedDNS = dnsName
+    if err := r.Client.Status().Update(ctx, xr); err != nil {
+        log.Error(err, "failed to update XR status")
+        return controller.Result{}, err
+    }
+
+    return controller.Result{}, nil
+}
+
+func isXRReady(xr *infrav1.XRVirtualMachine) bool {
+    for _, cond := range xr.Status.Conditions {
+        if cond.Type == "Ready" && cond.Status == corev1.ConditionTrue {
+            return true
+        }
+    }
+    return false
+}
+
+func getVMIP(vm *kubevirtv1.VirtualMachine) string {
+    // The VM's status.addresses contains the IP
+    for _, addr := range vm.Status.Addresses {
+        if addr.Type == "InternalIP" {
+            return addr.Address
+        }
+    }
+    return ""
+}
+
+func (r *DNSReconciler) ensureDNSRecord(ctx context.Context, xr *infrav1.XRVirtualMachine, vm *kubevirtv1.VirtualMachine, create bool) {
+    // Implementation: create/update/delete DNSRecord CR or call external DNS API
+    // This is a simplified example
+}</code></code></pre>
+
+<h3>Step 3: Set up the controller manager</h3>
+
+<pre><code>func (r *DNSReconciler) SetupWithManager(mgr controller.Manager) error {
+    return controller.NewControllerManagedBy(mgr).
+        For(&kubevirtv1.VirtualMachine{},
+            builder.WithPredicates(
+                predicate.NewPredicateFuncs(func(obj client.Object) bool {
+                    vm := obj.(*kubevirtv1.VirtualMachine)
+                    _, found := vm.Labels["crossplane.io/composite"]
+                    return found
+                }),
+            ),
+        ).
+        Watches(
+            &source.Kind{Type: &infrav1.XRVirtualMachine{}},
+            handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+                // Reconcile DNS for VMs when the XR changes
+                xr := obj.(*infrav1.XRVirtualMachine)
+                // Find related VMs via label selector
+                vms := &kubevirtv1.VirtualMachineList{}
+                r.List(ctx, vms, client.MatchingLabels{
+                    "crossplane.io/composite": fmt.Sprintf("xrvirtualmachine/%s", xr.Name),
+                })
+                var requests []reconcile.Request
+                for _, vm := range vms.Items {
+                    requests = append(requests, reconcile.Request{
+                        NamespacedName: types.NamespacedName{
+                            Name:      vm.Name,
+                            Namespace: vm.Namespace,
+                        },
+                    })
+                }
+                return requests
+            }),
+        ).
+        Complete(r)
+}</code></code></pre>
+
+<h3>Step 4: Deploy the controller</h3>
+
+<pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-enrichment-controller
+  namespace: crossplane-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-enrichment-controller
+  template:
+    metadata:
+      labels:
+        app: dns-enrichment-controller
+    spec:
+      serviceAccountName: dns-enrichment-controller
+      containers:
+        - name: controller
+          image: registry.example.com/dns-enrichment-controller:v1.0.0
+          env:
+            - name: DNS_ZONE
+              value: "infra.local"
+            - name: DNS_TTL
+              value: "300"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dns-enrichment-controller
+  namespace: crossplane-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dns-enrichment-controller
+rules:
+  - apiGroups: ["kubevirt.io"]
+    resources: ["virtualmachines"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["infra.example.com"]
+    resources: ["xrvirtualmachines"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["infra.example.com"]
+    resources: ["xrvirtualmachines/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["dns.infra.example.com"]
+    resources: ["dnsrecords"]
+    verbs: ["create", "get", "list", "watch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dns-enrichment-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dns-enrichment-controller
+subjects:
+  - kind: ServiceAccount
+    name: dns-enrichment-controller
+    namespace: crossplane-system</code></code></pre>
+
+<!-- ============================================================ -->
+<h2 id="concrete-examples">Concrete Examples</h2>
+
+<h3>Example 1: DNS Enrichment (Route53 / Cloudflare)</h3>
+
+<p>An external controller watches Crossplane-managed VirtualMachines and creates DNS records in Route53 or Cloudflare:</p>
+
+<pre><code># Controller creates this CR:
+apiVersion: dns.infra.example.com/v1
+kind: DNSRecord
+metadata:
+  name: vm-01-infra-local
+spec:
+  zoneID: Z1234567890
+  recordName: vm-01.infra.local
+  recordType: A
+  ttl: 300
+  alias: false
+  setIdentifier: ""
+status:
+  status: CREATE_IN_PROGRESS
+  recordID: abcdef123456
+  propagated: false
+
+# Controller writes to XR status:
+# xr.Status.EnrichedDNS = "vm-01.infra.local"</code></code></pre>
+
+<h3>Example 2: Monitoring Enrichment (Prometheus ServiceMonitor)</h3>
+
+<p>A controller watches XRs and creates Prometheus ServiceMonitors for VM endpoints:</p>
+
+<pre><code># Controller creates this CR:
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vm-01-monitor
+  labels:
+    crossplane.io/composite: xrvirtualmachine/webserver-01
+spec:
+  selector:
+    matchLabels:
+      vm-01-monitor: "true"
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+
+# Controller writes to XR status:
+# xr.Status.Monitoring.Enabled = true
+# xr.Status.Monitoring.Endpoint = "http://10.0.1.42:8080/metrics"</code></code></pre>
+
+<h3>Example 3: Security Enrichment (Vulnerability Scanning)</h3>
+
+<p>A controller watches VMs and triggers security scans, writing results to XR status:</p>
+
+<pre><code># Controller creates a Trivy scan job:
+apiVersion: aquasecurity.github.io/v1alpha1
+kind: VulnerabilityScan
+metadata:
+  name: vm-01-scan
+spec:
+  target:
+    type: VirtualMachine
+    name: vm-01
+    namespace: crossplane-system
+  severity: CRITICAL,HIGH
+  scanMode: full
+
+# Controller writes to XR status:
+# xr.Status.SecurityScan.Status = "vulnerable"
+# xr.Status.SecurityScan.Findings = 3
+# xr.Status.SecurityScan.LastScan = "2024-01-15T10:30:00Z"
+# xr.Status.SecurityScan.CriticalCVEs = ["CVE-2024-1234", "CVE-2024-5678"]</code></code></pre>
+
+<h3>Example 4: Certificate Enrichment (cert-manager / Vault)</h3>
+
+<p>A controller watches XRs and creates Certificate resources for VM TLS termination:</p>
+
+<pre><code># Controller creates this CR:
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vm-01-tls
+  labels:
+    crossplane.io/composite: xrvirtualmachine/webserver-01
+spec:
+  secretName: vm-01-tls-secret
+  commonName: vm-01.infra.local
+  dnsNames:
+    - vm-01.infra.local
+    - vm-01.infra.local.cluster.local
+  issuerRef:
+    name: infra-issuer
+    kind: ClusterIssuer
+  secretTemplate:
+    annotations:
+      infra.example.com/enriched-by: "cert-controller"
+
+# Controller writes to XR status:
+# xr.Status.Certificate.CN = "vm-01.infra.local"
+# xr.Status.Certificate.SecretName = "vm-01-tls-secret"
+# xr.Status.Certificate.Expires = "2025-01-15T00:00:00Z"</code></code></pre>
+
+<h3>Example 5: Network Policy Enrichment</h3>
+
+<p>A controller watches XRs and creates OpenShift NetworkPolicies for VM traffic:</p>
+
+<pre><code># Controller creates this CR:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vm-01-network-policy
+  labels:
+    crossplane.io/composite: xrvirtualmachine/webserver-01
+spec:
+  podSelector:
+    matchLabels:
+      kubevirt.io/created-by: vm-01
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              project: web-tier
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Controller writes to XR status:
+# xr.Status.NetworkPolicy.Applied = true
+# xr.Status.NetworkPolicy.IngressRules = 2
+# xr.Status.NetworkPolicy.EgressRules = 1</code></code></pre>
+
+<!-- ============================================================ -->
+<h2 id="argocd-integration">ArgoCD Integration</h2>
+
+<p>External enrichment controllers should be deployed via ArgoCD alongside the Crossplane infrastructure. This keeps the entire stack GitOps-managed.</p>
+
+<h3>Deployment structure</h3>
+
+<pre><code>infra-repo/
+├── argocd/
+│   └── applications/
+│       ├── crossplane-appofapps.yaml      # ArgoCD App-of-Apps
+│       ├── crossplane-workloads.yaml      # Crossplane XRDs, Compositions
+│       └── enrichment-controllers.yaml    # External enrichment controllers
+├── crossplane/
+│   ├── xrd/
+│   ├── composition/
+│   └── claim/
+└── enrichment/
+    ├── dns-controller/
+    │   ├── deployment.yaml
+    │   ├── rbac.yaml
+    │   └── controller.go
+    ├── monitoring-controller/
+    │   ├── deployment.yaml
+    │   └── rbac.yaml
+    └── security-controller/
+        ├── deployment.yaml
+        └── rbac.yaml</code></code></pre>
+
+<h3>ArgoCD Application for enrichment controllers</h3>
+
+<pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: enrichment-controllers
+  namespace: argocd
+spec:
+  project: crossplane
+  source:
+    repoURL: https://github.com/org/infra-repo.git
+    targetRevision: main
+    path: enrichment
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true</code></code></pre>
+
+<h3>Sync ordering</h3>
+
+<p>Use ArgoCD sync waves to ensure enrichment controllers are running before Claims are applied:</p>
+
+<pre><code># In enrichment controller deployment:
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+
+# In Crossplane XRD/Composition:
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+
+# In Claims:
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "30"</code></code></pre>
+
+<div class="note">
+  <div class="note-title">Sync wave ordering</div>
+  <p>Wave 10 (controllers) → Wave 20 (XRDs + Compositions) → Wave 30 (Claims). This ensures enrichment controllers are ready to observe XRs before any Claims are created. Without this ordering, a Claim might be created before the enrichment controller is running, causing a missed enrichment cycle.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<h3>Common issues and fixes</h3>
+
+<table>
+  <tr>
+    <th>Symptom</th>
+    <th>Check</th>
+    <th>Fix</th>
+  </tr>
+  <tr>
+    <td>Enrichment controller not creating resources</td>
+    <td><code>kubectl logs -n crossplane-system -l app=dns-enrichment-controller</code></td>
+    <td>Check RBAC permissions; verify label selectors match</td>
+  </tr>
+  <tr>
+    <td>XR status not updated</td>
+    <td><code>kubectl describe xrvirtualmachine &lt;name&gt;</code></td>
+    <td>Controller needs <code>update</code> on <code>xrvirtualmachines/status</code></td>
+  </tr>
+  <tr>
+    <td>DNS record created for wrong VM</td>
+    <td>Check <code>crossplane.io/composite</code> label on the VirtualMachine</td>
+    <td>Ensure Composition doesn't strip the label; verify controller label parsing</td>
+  </tr>
+  <tr>
+    <td>Enrichment controller crashes on XR update</td>
+    <td><code>kubectl logs -n crossplane-system -l app=dns-enrichment-controller --previous</code></td>
+    <td>Check for nil pointer dereferences when accessing XR status fields</td>
+  </tr>
+  <tr>
+    <td>Connection secret missing enriched data</td>
+    <td><code>kubectl get secret -n &lt;claim-namespace&gt; -o yaml</code></td>
+    <td>Controller needs <code>update</code> permission on the secret's namespace</td>
+  </tr>
+  <tr>
+    <td>ArgoCD sync race: controller not ready when Claim applied</td>
+    <td>Check sync wave annotations</td>
+    <td>Add sync-wave annotations to ensure ordering</td>
+  </tr>
+  <tr>
+    <td>Enrichment data stale after XR update</td>
+    <td>Check controller reconciliation loop; verify it watches XR status changes</td>
+    <td>Add a second watch on XR status changes, not just spec changes</td>
+  </tr>
+</table>
+
+<h3>Debugging enrichment flows</h3>
+
+<pre><code class="kubectl"># 1. Verify the XR has the expected labels
+kubectl get xrvirtualmachine webserver-01 -o yaml | grep -A5 labels:
+
+# 2. Verify the managed resource has the crossplane.io/composite label
+kubectl get virtualmachine -n crossplane-system -o yaml | grep -A2 crossplane.io/composite
+
+# 3. Check the enrichment controller logs
+kubectl logs -n crossplane-system -l app=dns-enrichment-controller -f
+
+# 4. Check if the enrichment CR was created
+kubectl get dnsrecords -A | grep webserver
+
+# 5. Check XR status enrichment
+kubectl get xrvirtualmachine webserver-01 -o jsonpath='{.status.enrichedDNS}'
+
+# 6. Check the connection secret for enriched data
+kubectl get secret -n default crossplane-kubevirt-webserver-01 -o jsonpath='{.data}' | base64 -d
+
+# 7. Trace the controller's reconciliation events
+kubectl get events -n crossplane-system --field-selector reason=Enrich</code></code></pre>
+
+<!-- ============================================================ -->
+<h2 id="exercise">Exercise</h2>
+
+<div class="exercise">
+  <div class="exercise-title">Exercise: Build a Monitoring Enrichment Controller</div>
+  <p>Build an external controller that enriches Crossplane-managed VMs with Prometheus monitoring:</p>
+  <ol style="margin: 0.5rem 0 0 1.5rem;">
+    <li>Define a <code>ServiceMonitor</code> CRD in <code>enrichment/monitoring-api/api/monitoring.coreos.com/v1/servicemonitor.yaml</code></li>
+    <li>Write a controller that watches <code>VirtualMachine</code> CRs with the <code>crossplane.io/composite</code> label</li>
+    <li>When a VM reaches <code>Running</code> phase, create a <code>ServiceMonitor</code> that targets the VM's metrics endpoint</li>
+    <li>Write the monitoring endpoint URL back to the XR's <code>status.monitoring.endpoint</code> field</li>
+    <li>When the VM is deleted, delete the <code>ServiceMonitor</code></li>
+    <li>Deploy via ArgoCD with sync-wave 10 (before Claims)</li>
+  </ol>
+</div>
+
+<div class="collapsible">
+  <summary>Click to reveal the answer</summary>
+  <div class="answer">
+    <h4>1. ServiceMonitor CRD</h4>
+    <pre><code>apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: servicemonitors.monitoring.coreos.com
+spec:
+  group: monitoring.coreos.com
+  names:
+    kind: ServiceMonitor
+    plural: servicemonitors
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                selector:
+                  type: object
+                  properties:
+                    matchLabels:
+                      type: object
+                endpoints:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      port: { type: string }
+                      path: { type: string }
+                      interval: { type: string }
+                      scrapeTimeout: { type: string }
+              required: [selector, endpoints]</code></code></pre>
+
+    <h4>2. Controller reconciliation (simplified)</h4>
+    <pre><code>func (r *MonitoringReconciler) Reconcile(ctx context.Context, req controller.Request) (controller.Result, error) {
+    vm := &kubevirtv1.VirtualMachine{}
+    r.Get(ctx, req.NamespacedName, vm)
+
+    xrName, found := vm.Labels["crossplane.io/composite"]
+    if !found { return controller.Result{}, nil }
+
+    xr := &infrav1.XRVirtualMachine{}
+    r.Get(ctx, types.NamespacedName{Name: xrName}, xr)
+
+    // Check if VM is running
+    if vm.Status.Running != nil && *vm.Status.Running &&
+       vm.Status.Phase == kubevirtv1.Running {
+
+        // Create ServiceMonitor
+        sm := &monitoringv1.ServiceMonitor{
+            ObjectMeta: metav1.ObjectMeta{
+                Name:      fmt.Sprintf("%s-monitor", xr.Name),
+                Namespace: "monitoring",
+                Labels:    map[string]string{"crossplane.io/composite": xrName},
+            },
+            Spec: monitoringv1.ServiceMonitorSpec{
+                Selector: metav1.LabelSelector{
+                    MatchLabels: map[string]string{
+                        fmt.Sprintf("vm-%s-monitor", xr.Name): "true",
+                    },
+                },
+                Endpoints: []monitoringv1.Endpoint{
+                    {
+                        Port: "metrics",
+                        Path: "/metrics",
+                        Interval: "15s",
+                    },
+                },
+            },
+        }
+        controllerutil.SetControllerReference(xr, sm, r.Scheme)
+        r.Create(ctx, sm)
+
+        // Write to XR status
+        xr.Status.Monitoring.Endpoint = fmt.Sprintf("http://%s:8080/metrics", xr.Name)
+        xr.Status.Monitoring.Enabled = true
+        r.Status().Update(ctx, xr)
+    }
+
+    return controller.Result{}, nil
+}</code></code></pre>
+
+    <h4>3. Key design decisions</h4>
+    <ul style="margin: 0.5rem 0 0 1.5rem;">
+      <li>The ServiceMonitor is created in the <code>monitoring</code> namespace, not the VM's namespace. This is because Prometheus typically scrapes from a centralized monitoring namespace.</li>
+      <li>The <code>SetControllerReference</code> call ensures the ServiceMonitor is garbage-collected when the XR is deleted.</li>
+      <li>The controller watches VM status changes, not just spec changes — this is critical because the VM transitions from <code>Stopped</code> to <code>Running</code> asynchronously.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="summary">Summary</h2>
+
+<p>The enrichment pattern extends Crossplane's provisioning capabilities by delegating cross-cutting concerns to external controllers. The pattern has three variants:</p>
+
+<div class="flow-row">
+  <div class="flow-box"><strong>Status</strong><br>Write to XR.status</div>
+  <div class="flow-box"><strong>Resource</strong><br>Create external CRs</div>
+  <div class="flow-box"><strong>Secret</strong><br>Enrich connection secrets</div>
+</div>
+
+<p>The key principles:</p>
+<ul style="margin: 0.5rem 0 1rem 1.5rem;">
+  <li><strong>Trigger</strong> — External controllers watch for XRs or managed resources via labels, annotations, or status conditions</li>
+  <li><strong>Target</strong> — Enrichment data goes to XR status, separate CRs, or connection secrets</li>
+  <li><strong>Decouple</strong> — The Composition handles provisioning; enrichment controllers handle everything else</li>
+  <li><strong>GitOps</strong> — Deploy enrichment controllers via ArgoCD with proper sync-wave ordering</li>
+  <li><strong>RBAC</strong> — External controllers need explicit permissions to read XRs and write to their status</li>
+</ul>
+
+<p>Enrichment turns a bare VM into a production-ready workload: it gets DNS, monitoring, security scanning, certificates, and network policies — all managed by specialized external controllers that observe the XR and act independently.</p>
+
+</body>
+</html>

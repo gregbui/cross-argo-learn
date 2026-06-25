@@ -60,6 +60,7 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-012-windows-vm-configuration-data.html  # VM configuration data for Windows VMs
     ├── explainer-013-storage-for-vms-datavolumes-pvc-lifecycle-and-storage-classes.html  # Storage for VMs — DataVolumes, PVC lifecycle, storage classes
     ├── explainer-014-xrd-composition-lifecycle.html           # XRD & Composition lifecycle — step-by-step walkthrough
+    ├── explainer-015-enrichment-pattern.html              # Enrichment pattern — external controllers for XRs
 ```
 
 ## Explainers
@@ -304,6 +305,23 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 **Key concepts:** XRD schema, Composition Functions, patchAndTransform, connections, ArgoCD sync, Claim lifecycle, troubleshooting
 
 **Exercise:** Create a v1beta1 XRD with GPU and data disk support, write a Windows Composition, and provision a Windows VM
+
+### Explainer 15: [Enrichment Pattern — External Controllers for Crossplane XRs](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-015-enrichment-pattern.html)
+
+**What it covers:**
+- The enrichment pattern: using external controllers to add data and capabilities to XRs beyond what the Composition renders
+- Three pattern variants: status enrichment, resource enrichment, and connection secret enrichment
+- Enrichment triggers: label-based, annotation-based, status-based, and cross-reference triggers
+- Enrichment targets: XR status fields, XR annotations, dedicated enrichment CRs, and connection secrets
+- Complete implementation of a DNS enrichment controller (Go, controller-runtime)
+- Five concrete examples: DNS, monitoring, security scanning, certificates, network policies
+- ArgoCD integration: sync-wave ordering for enrichment controllers
+- Troubleshooting checklist and debugging commands
+- Exercise: build a monitoring enrichment controller with Prometheus ServiceMonitor
+
+**Key concepts:** external controllers, crossplane.io/composite label, status enrichment, resource enrichment, connection secret enrichment, sync-wave ordering, RBAC for enrichment
+
+**Exercise:** Build a monitoring enrichment controller that creates Prometheus ServiceMonitors for Crossplane-managed VMs
 
 ## Glossary
 The canonical terminology is captured in [`GLOSSARY.md`](GLOSSARY.md). Key terms include:
