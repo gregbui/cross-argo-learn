@@ -290,6 +290,8 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 **Exercise:** Design a storage pipeline for a production PostgreSQL VM with base image management, snapshot policy, and cross-DC replication
 
+---
+
 ### Explainer 14: [XRD &amp; Composition Lifecycle — Step-by-Step Walkthrough](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-014-xrd-composition-lifecycle.html)
 
 **What it covers:**
@@ -305,6 +307,8 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 **Key concepts:** XRD schema, Composition Functions, patchAndTransform, connections, ArgoCD sync, Claim lifecycle, troubleshooting
 
 **Exercise:** Create a v1beta1 XRD with GPU and data disk support, write a Windows Composition, and provision a Windows VM
+
+---
 
 ### Explainer 15: [Enrichment Pattern — External Controllers for Crossplane XRs](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-015-enrichment-pattern.html)
 
