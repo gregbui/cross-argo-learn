@@ -59,6 +59,7 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-011-multi-cluster-vm-placement.html  # Multi-cluster VM placement logic
     ├── explainer-012-windows-vm-configuration-data.html  # VM configuration data for Windows VMs
     ├── explainer-013-storage-for-vms-datavolumes-pvc-lifecycle-and-storage-classes.html  # Storage for VMs — DataVolumes, PVC lifecycle, storage classes
+    ├── explainer-014-xrd-composition-lifecycle.html           # XRD & Composition lifecycle — step-by-step walkthrough
 ```
 
 ## Explainers
@@ -287,6 +288,22 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 **Key concepts:** DataVolume, CDI, StorageClass, PVC lifecycle, reclaim policy, VolumeSnapshot, VirtualMachineSnapshot, DataImportCron, CDI upload proxy
 
 **Exercise:** Design a storage pipeline for a production PostgreSQL VM with base image management, snapshot policy, and cross-DC replication
+
+### Explainer 14: [XRD &amp; Composition Lifecycle — Step-by-Step Walkthrough](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-014-xrd-composition-lifecycle.html)
+
+**What it covers:**
+- The four-phase lifecycle: Design XRD → Write Composition → Deploy via ArgoCD → Provision via Claim
+- Step-by-step XRD schema design with required/optional fields, defaults, and status reporting
+- Full Composition with DataVolume, VirtualMachine, and PVC managed resources
+- Connection patterns: wiring DataVolume PVC to VirtualMachine volumes
+- ArgoCD Application resource configuration for Crossplane manifests
+- Claim creation and end-to-end provisioning flow
+- Troubleshooting checklist: symptoms, diagnostics, and fixes for each lifecycle stage
+- Exercise: extending the XRD to v1beta1 with GPU support and data disks
+
+**Key concepts:** XRD schema, Composition Functions, patchAndTransform, connections, ArgoCD sync, Claim lifecycle, troubleshooting
+
+**Exercise:** Create a v1beta1 XRD with GPU and data disk support, write a Windows Composition, and provision a Windows VM
 
 ## Glossary
 The canonical terminology is captured in [`GLOSSARY.md`](GLOSSARY.md). Key terms include:

@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XRD & Composition Lifecycle — Step-by-Step Walkthrough</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  h4 {
+    font-size: 1rem;
+    color: var(--accent-purple);
+    margin-top: 1.2rem;
+    margin-bottom: 0.5rem;
+  }
+  p { margin-bottom: 1rem; }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9em;
+  }
+  :not(pre) > code {
+    background: var(--surface);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+  .note {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .note-title {
+    font-weight: bold;
+    color: var(--accent);
+    margin-bottom: 0.25rem;
+  }
+  .warning {
+    background: var(--surface);
+    border-left: 3px solid var(--accent-orange);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .warning-title {
+    font-weight: bold;
+    color: var(--accent-orange);
+    margin-bottom: 0.25rem;
+  }
+  .exercise {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    margin: 1.5rem 0;
+  }
+  .exercise-title {
+    font-weight: bold;
+    color: var(--accent-green);
+    margin-bottom: 0.5rem;
+  }
+  .collapsible {
+    margin: 1rem 0;
+  }
+  .collapsible summary {
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--accent-green);
+    font-weight: bold;
+    user-select: none;
+  }
+  .collapsible summary:hover {
+    background: var(--border);
+  }
+  .collapsible .answer {
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 0 0 6px 6px;
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .toc h3 {
+    margin-top: 0;
+    color: #f0f6fc;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc li {
+    padding: 0.2rem 0;
+  }
+  .toc li a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .toc li a:hover {
+    text-decoration: underline;
+  }
+  .step-number {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--bg);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 28px;
+    font-weight: bold;
+    font-size: 0.85rem;
+    margin-right: 0.5rem;
+  }
+  .flow-arrow {
+    text-align: center;
+    font-size: 1.5rem;
+    color: var(--accent);
+    margin: 0.5rem 0;
+  }
+  .flow-box {
+    display: inline-block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    margin: 0.25rem;
+    font-size: 0.85rem;
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+  }
+  th {
+    background: var(--surface);
+    color: #f0f6fc;
+    font-weight: bold;
+  }
+  td { background: var(--code-bg); }
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.5em;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  .badge-yaml { background: #1a3a5c; color: #79c0ff; }
+  .badge-kubectl { background: #2d1b4e; color: #bc8cff; }
+  .badge-argocd { background: #1b3a1b; color: #7ee787; }
+  .badge-verify { background: #3a2d1b; color: #ffa657; }
+</style>
+</head>
+<body>
+
+<h1>XRD &amp; Composition Lifecycle — Step-by-Step Walkthrough</h1>
+
+<p>A practical, sequential walkthrough of creating, deploying, and using Crossplane XRDs and Compositions for virtual machine workloads. This is the operational companion to <em>Explainer 7</em> (XRD &amp; Composition deep dive) — it focuses on <strong>what you do, in what order, and how to verify each step</strong>.</p>
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ul>
+    <li><a href="#overview">Overview: The Four-Phase Lifecycle</a></li>
+    <li><a href="#phase-1">Phase 1 — Design the XRD Schema</a></li>
+    <li><a href="#phase-2">Phase 2 — Write the Composition</a></li>
+    <li><a href="#phase-3">Phase 3 — Deploy to the Cluster via ArgoCD</a></li>
+    <li><a href="#phase-4">Phase 4 — Use the Claim to Provision a VM</a></li>
+    <li><a href="#troubleshooting">Troubleshooting the Lifecycle</a></li>
+    <li><a href="#exercise">Exercise</a></li>
+  </ul>
+</div>
+
+<h2 id="overview">Overview: The Four-Phase Lifecycle</h2>
+
+<p>Creating a VM workload via Crossplane follows a strict sequence. Each phase produces artifacts that the next phase consumes:</p>
+
+<div class="flow-row">
+  <div class="flow-box"><strong>Phase 1</strong><br>XRD schema</div>
+  <span style="color: var(--accent);">→</span>
+  <div class="flow-box"><strong>Phase 2</strong><br>Composition</div>
+  <span style="color: var(--accent);">→</span>
+  <div class="flow-box"><strong>Phase 3</strong><br>ArgoCD sync to cluster</div>
+  <span style="color: var(--accent);">→</span>
+  <div class="flow-box"><strong>Phase 4</strong><br>Claim → running VM</div>
+</div>
+
+<p><strong>Key principle:</strong> You cannot create a Claim until the XRD exists in the cluster. You cannot verify the XRD works until the Composition is deployed alongside it. ArgoCD is the delivery mechanism for Phases 1–3; <code>kubectl</code> (or Git) is the delivery mechanism for Phase 4.</p>
+
+<div class="note">
+  <div class="note-title">Prerequisites</div>
+  <ul style="margin: 0.5rem 0 0 1rem;">
+    <li>OpenShift cluster with KubeVirt operator installed</li>
+    <li>Crossplane installed with <code>provider-kubevirt</code> configured</li>
+    <li>ArgoCD running with an App-of-Apps bootstrap pointing to your Git repo</li>
+    <li>Local checkout of the infrastructure repo with <code>crossplane/</code> directory</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="phase-1">Phase 1 — Design the XRD Schema</h2>
+
+<p>The XRD defines the <strong>interface</strong> that workload teams will use. It is the contract between the infrastructure team (who writes the Composition) and the application team (who writes the Claim).</p>
+
+<h3>Step 1.1 — Create the XRD file</h3>
+
+<p>Create <code>crossplane/xrd/virtualmachine.yaml</code>:</p>
+
+<pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xrvirtualmachines.infra.example.com
+spec:
+  group: infra.example.com
+  names:
+    kind: XRVirtualMachine
+    plural: xrvirtualmachines
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                cpu:
+                  type: integer
+                  description: Number of vCPUs
+                memory:
+                  type: string
+                  description: RAM allocation (e.g., "8Gi")
+                guestOS:
+                  type: string
+                  enum: [linux, windows]
+                  description: Guest operating system type
+                imageName:
+                  type: string
+                  description: Name of the base OS image (from ImageStream)
+                storage:
+                  type: object
+                  properties:
+                    size:
+                      type: string
+                      default: "20Gi"
+                      description: Root disk size
+                    storageClass:
+                      type: string
+                      description: Kubernetes StorageClass for the PVC
+                  required: [size]
+                network:
+                  type: object
+                  properties:
+                    networkName:
+                      type: string
+                      description: OpenShift network name (default: default)
+                    podCIDR:
+                      type: string
+                      description: Pod CIDR for the VM
+                  required: [networkName]
+                userData:
+                  type: string
+                  format: byte
+                  description: Base64-encoded cloud-init or guest-custom-data
+              required: [cpu, memory, guestOS, imageName, storage, network]
+            status:
+              type: object
+              properties:
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                vmName:
+                  type: string
+                  description: Name of the provisioned VirtualMachine
+                vmStatus:
+                  type: string
+                  description: Current VirtualMachine phase</code></code></pre>
+
+<div class="note">
+  <div class="note-title">Design decisions in this XRD</div>
+  <ul style="margin: 0.5rem 0 0 1rem;">
+    <li><code>group: infra.example.com</code> — your organization's domain. Use a real domain in production.</li>
+    <li><code>referenceable: true</code> — allows other Compositions to reference this XR by name (needed for cross-references).</li>
+    <li><code>status.vmName</code> and <code>status.vmStatus</code> — the Composition writes these back so Claim users can see VM state without knowing the underlying CR.</li>
+    <li><code>userData</code> is <code>byte</code> format — the Composition will base64-encode the guest-custom-data before passing it to KubeVirt.</li>
+  </ul>
+</div>
+
+<h3>Step 1.2 — Verify the XRD is valid</h3>
+
+<p>Before deploying, validate the schema locally:</p>
+
+<pre><code class="kubectl"># Apply the XRD to the cluster (or commit to Git if using ArgoCD)
+kubectl apply -f crossplane/xrd/virtualmachine.yaml
+
+# Verify the XRD was created
+kubectl get xrvirtualmachines.infra.example.com
+
+# Check the XRD's conditions
+kubectl describe xrd xrvirtualmachines.infra.example.com</code></code></pre>
+
+<p>Look for <code>Established: True</code> in the conditions. If it's <code>False</code>, check the <code>reason</code> field — it will tell you if the schema has validation errors.</p>
+
+<div class="warning">
+  <div class="warning-title">Common pitfall</div>
+  <p>If you change the XRD after it has been used, Crossplane will block the update. You must either:</p>
+  <ul style="margin: 0.5rem 0 0 1rem;">
+    <li>Delete all existing Claims and XRs (destructive), or</li>
+    <li>Add new fields as optional with defaults (safe), or</li>
+    <li>Create a new version (<code>v1beta1</code>) and set the old version to <code>served: false</code>.</li>
+  </ul>
+</div>
+
+<h3>Step 1.3 — Test the XRD schema with a dry-run Claim</h3>
+
+<p>Create a sample Claim to verify the schema accepts valid input:</p>
+
+<pre><code class="yaml"># crossplane/claim/virtualmachine-sample.yaml
+apiVersion: infra.example.com/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: sample-vm
+spec:
+  cpu: 2
+  memory: "4Gi"
+  guestOS: linux
+  imageName: rhel-9.2-base
+  storage:
+    size: "20Gi"
+    storageClass: ocs-storagecluster-ceph-rbd
+  network:
+    networkName: default</code></code></pre>
+
+<pre><code class="kubectl"># Dry-run apply to validate schema acceptance
+kubectl apply -f crossplane/claim/virtualmachine-sample.yaml --dry-run=client
+
+# Check that the Claim was created (it will sit in Pending until the Composition exists)
+kubectl get virtualmachine sample-vm</code></code></pre>
+
+<p>At this point the Claim will show <code>CompositeResourceRef: &lt;none&gt;</code> and <code>Ready: False</code> — that's expected. The Composition hasn't been deployed yet.</p>
+
+<!-- ============================================================ -->
+<h2 id="phase-2">Phase 2 — Write the Composition</h2>
+
+<p>The Composition is the <strong>recipe</strong>. It tells Crossplane how to turn an XRVirtualMachine into actual KubeVirt resources (VirtualMachine, DataVolume, PVC).</p>
+
+<h3>Step 2.1 — Create the Composition file</h3>
+
+<p>Create <code>crossplane/composition/virtualmachine.yaml</code>. This example uses the <strong>declarative (patchAndSync) pipeline pattern</strong> with a Composition Function, which gives you conditional logic and data transforms that pure YAML patches can't express:</p>
+
+<pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xrvirtualmachine-linux
+  labels:
+    infra.example.com/composition-type: pipeline
+    infra.example.com/guest-os: linux
+spec:
+  writeConnectionSecretsToNamespace: crossplane-system
+  compositeResourceSelector:
+    matchLabels:
+      infra.example.com/guest-os: linux
+  functionRef:
+    name: crossplane-contrib-function-patch-and-transform
+  patchAndTransform:
+    - step: set-infrastructure
+      patches:
+        # Render the VirtualMachine CR
+        - type: fromCompositeFieldSet
+          from: spec
+          to: metadata.annotations
+          transforms:
+            - type: string
+              string:
+                fmt: '{{ .cpu }}-{{ .memory }}-{{ .guestOS }}'
+                type: Format
+
+        # Render the DataVolume for the base image
+        - type: patchAndSelect
+          patch:
+            type: fromCompositeFieldSet
+            from: spec.storage
+            to: spec
+          to: spec.resources[0]
+          selectedForResources:
+            - kind: DataVolume
+              apiVersion: cdi.kubevirt.io/v1beta1
+
+        # Render the PVC (if not using DataVolume, this is where you'd create a PVC)
+        - type: patchAndSelect
+          patch:
+            type: fromCompositeFieldSet
+            from: spec.storage
+            to: spec
+          to: spec.resources[1]
+          selectedForResources:
+            - kind: PersistentVolumeClaim
+              apiVersion: v1</code></code></pre>
+
+<div class="note">
+  <div class="note-title">Why patchAndTransform?</div>
+  <p>The <code>patchAndTransform</code> pattern (via the <code>function-patch-and-transform</code> function) is the most widely used Composition pattern because it:</p>
+  <ul style="margin: 0.5rem 0 0 1rem;">
+    <li>Supports conditional rendering (only create a DataVolume if the image isn't cached)</li>
+    <li>Allows data transforms (base64-encoding, string formatting) inline</li>
+    <li>Is simpler than writing a Go or Lua function</li>
+    <li>Is the default pattern in most Crossplane examples</li>
+  </ul>
+  <p>Use a custom Go/Lua function only when you need loops, external API calls, or complex data flows.</p>
+</div>
+
+<h3>Step 2.2 — The full Composition with all managed resources</h3>
+
+<p>Here's the complete Composition for a Linux VM with a DataVolume, VirtualMachine, and proper connections:</p>
+
+<pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xrvirtualmachine-linux
+  labels:
+    infra.example.com/composition-type: pipeline
+    infra.example.com/guest-os: linux
+spec:
+  writeConnectionSecretsToNamespace: crossplane-system
+  compositeResourceSelector:
+    matchLabels:
+      infra.example.com/guest-os: linux
+  functionRef:
+    name: crossplane-contrib-function-patch-and-transform
+  patchAndTransform:
+    - step: create-managed-resources
+      resources:
+        # ── Resource 0: DataVolume (base image import) ──
+        - name: datavolume
+          base:
+            apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataVolume
+            spec:
+              storage: {}
+          patches:
+            - type: fromCompositeFieldSet
+              from: spec
+              to: spec.storage.storageClass
+            - type: fromCompositeFieldSet
+              from: spec.storage.size
+              to: spec.storage.size
+            - type: fromCompositeFieldSet
+              from: spec.imageName
+              to: spec.source.http.url
+              transforms:
+                - type: string
+                  string:
+                    fmt: 'https://image-registry.example.com/%s.qcow2'
+
+        # ── Resource 1: VirtualMachine ──
+        - name: virtualmachine
+          base:
+            apiVersion: kubevirt.io/v1
+            kind: VirtualMachine
+            spec:
+              runStrategy: Halted
+              template:
+                spec:
+                  domain:
+                    cpu:
+                      cores: 1
+                    devices: {}
+                    machines:
+                      machineType: pc-q35-rhel9.2.0
+                  terminationGracePeriodSeconds: 30
+                  networks:
+                    - name: default-network
+                      pod: {}
+                  volumes: []
+          patches:
+            - type: fromCompositeFieldSet
+              from: spec.cpu
+              to: spec.template.spec.domain.cpu.cores
+            - type: fromCompositeFieldSet
+              from: spec.memory
+              to: spec.template.spec.domain.memory.guest
+            - type: fromCompositeFieldSet
+              from: spec.guestOS
+              to: spec.template.spec.domain.devices.automaticCPUPlacement
+              transforms:
+                - type: map
+                  map:
+                    linux: true
+                    windows: true
+            - type: fromCompositeFieldSet
+              from: spec.userData
+              to: spec.template.spec.guestCustomData
+              transforms:
+                - type: string
+                  string:
+                    encode: Base64
+            - type: fromCompositeFieldSet
+              from: spec.network.networkName
+              to: spec.template.spec.networks[0].name
+              transforms:
+                - type: string
+                  string:
+                    fmt: '%s-network'
+
+        # ── Resource 2: PVC (fallback if no DataVolume) ──
+        - name: pvc
+          base:
+            apiVersion: v1
+            kind: PersistentVolumeClaim
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 20Gi
+          patches:
+            - type: fromCompositeFieldSet
+              from: spec.storage.size
+              to: spec.resources.requests.storage
+            - type: fromCompositeFieldSet
+              from: spec.storage.storageClass
+              to: spec.storageClassName</code></code></pre>
+
+<h3>Step 2.3 — Wire the connections between resources</h3>
+
+<p>Connections tell Crossplane how to link the DataVolume to the VirtualMachine. Add a <code>connections</code> section:</p>
+
+<pre><code>  connections:
+    # Link DataVolume PVC to VirtualMachine volumes
+    - from: datavolume
+      to: virtualmachine
+      patches:
+        - type: toCompositeField
+          from: status.atProvider.url
+          to: spec.template.spec.volumes[0].persistentVolumeClaim.claimName
+          transforms:
+            - type: string
+              string:
+                fmt: '%s-dv'
+    # Link PVC to VirtualMachine (fallback path)
+    - from: pvc
+      to: virtualmachine
+      patches:
+        - type: toCompositeField
+          from: metadata.name
+          to: spec.template.spec.volumes[0].persistentVolumeClaim.claimName</code></code></pre>
+
+<div class="note">
+  <div class="note-title">Connection resolution order</div>
+  <p>Crossplane resolves connections in sequence. The first matching patch wins. If a DataVolume is created, its PVC name flows to the VirtualMachine. If only a PVC exists (no DataVolume), the PVC name flows instead. This is why the fallback PVC resource exists.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="phase-3">Phase 3 — Deploy to the Cluster via ArgoCD</h2>
+
+<p>Now that you have the XRD and Composition files, you need to get them into the cluster. ArgoCD is the delivery mechanism.</p>
+
+<h3>Step 3.1 — Organize files in your Git repo</h3>
+
+<p>Structure your infrastructure repo so ArgoCD can find and sync the resources:</p>
+
+<pre><code>infra-repo/
+├── argocd/
+│   └── applications/
+│       ├── crossplane-appofapps.yaml      # ArgoCD App-of-Apps bootstrap
+│       └── crossplane-workloads.yaml      # ArgoCD app for Crossplane resources
+├── crossplane/
+│   ├── xrd/
+│   │   └── virtualmachine.yaml            # XRD
+│   ├── composition/
+│   │   ├── virtualmachine-linux.yaml      # Composition (Linux)
+│   │   └── virtualmachine-windows.yaml    # Composition (Windows)
+│   ├── claim/
+│   │   └── virtualmachine-sample.yaml     # Sample Claim (deployed separately)
+│   └── providerconfig/
+│       └── kubevirt.yaml                  # ProviderConfig for KubeVirt
+└── README.md</code></code></pre>
+
+<h3>Step 3.2 — Create the ArgoCD Application resource</h3>
+
+<p>Create <code>argocd/applications/crossplane-workloads.yaml</code>:</p>
+
+<pre><code>apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-infrastructure
+  namespace: argocd
+spec:
+  project: crossplane
+  source:
+    repoURL: https://github.com/org/infra-repo.git
+    targetRevision: main
+    path: crossplane
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true</code></code></pre>
+
+<h3>Step 3.3 — Sync the XRD and Composition</h3>
+
+<pre><code class="argocd"># Sync via ArgoCD UI or CLI
+argocd app sync crossplane-infrastructure
+
+# Or apply directly for testing
+kubectl apply -f crossplane/xrd/virtualmachine.yaml
+kubectl apply -f crossplane/composition/virtualmachine-linux.yaml</code></code></pre>
+
+<h3>Step 3.4 — Verify deployment</h3>
+
+<pre><code class="kubectl"># Check the XRD is established
+kubectl get xrvirtualmachines.infra.example.com
+# Expected: xrvirtualmachines.infra.example.com   Established   True
+
+# Check the Composition is ready
+kubectl get composition xrvirtualmachine-linux
+# Expected: xrvirtualmachine-linux   Ready   True
+
+# Check the Composition Function pod is running
+kubectl get pods -n crossplane-system -l app=crossplane-contrib-function-patch-and-transform
+# Expected: 1/1 Running
+
+# Verify the CRD was created by the XRD
+kubectl api-versions | grep infra.example.com
+# Expected: infra.example.com/v1alpha1</code></code></pre>
+
+<div class="warning">
+  <div class="warning-title">If the Composition shows <code>Ready: False</code></div>
+  <p>Common causes:</p>
+  <ul style="margin: 0.5rem 0 0 1rem;">
+    <li>The Composition Function pod is not running — check <code>kubectl get pods -n crossplane-system</code></li>
+    <li>Schema mismatch — the XRD schema doesn't match the fields referenced in the Composition's patches</li>
+    <li>Missing label — the <code>compositeResourceSelector.matchLabels</code> don't match any XRs</li>
+    <li>Provider not installed — the <code>provider-kubevirt</code> CRDs (VirtualMachine, DataVolume) are not present</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="phase-4">Phase 4 — Use the Claim to Provision a VM</h2>
+
+<p>Now the XRD and Composition are live. Workload teams can create Claims — instances of the XRD — and Crossplane will render and apply the Composition.</p>
+
+<h3>Step 4.1 — Create a Claim</h3>
+
+<p>Create <code>crossplane/claim/virtualmachine-production.yaml</code>:</p>
+
+<pre><code>apiVersion: infra.example.com/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: webserver-01
+  labels:
+    app: webserver
+    env: production
+spec:
+  cpu: 4
+  memory: "8Gi"
+  guestOS: linux
+  imageName: rhel-9.2-base
+  storage:
+    size: "50Gi"
+    storageClass: ocs-storagecluster-ceph-rbd
+  network:
+    networkName: default
+  userData: |
+    #cloud-config
+    chpasswd:
+      list: |
+        cloud-user:{{ .password }}
+      expire: false
+    users:
+      - name: cloud-user
+        ssh-authorized-keys:
+          - ssh-rsa AAAA... user@host
+    runcmd:
+      - systemctl enable httpd
+      - systemctl start httpd</code></code></pre>
+
+<h3>Step 4.2 — Apply the Claim</h3>
+
+<pre><code class="kubectl"># Apply the Claim (via Git or directly)
+kubectl apply -f crossplane/claim/virtualmachine-production.yaml
+
+# Watch the Claim progress
+kubectl get virtualmachine webserver-01 -w</code></code></pre>
+
+<h3>Step 4.3 — Trace the provisioning flow</h3>
+
+<p>Watch each stage as Crossplane processes the Claim:</p>
+
+<pre><code class="kubectl"># 1. Claim → XR (Crossplane creates a composite resource)
+kubectl get xrvirtualmachine webserver-01
+
+# 2. XR → Composition renders managed resources
+kubectl get xr xrvirtualmachine.webserver-01 -o yaml | grep -A5 'resources:'
+
+# 3. Check the DataVolume
+kubectl get datavolume -n crossplane-system | grep webserver
+
+# 4. Check the VirtualMachine
+kubectl get virtualmachine -n crossplane-system | grep webserver
+
+# 5. Check the PVC
+kubectl get pvc -n crossplane-system | grep webserver</code></code></pre>
+
+<p>The typical timeline:</p>
+
+<table>
+  <tr>
+    <th>Stage</th>
+    <th>What happens</th>
+    <th>Typical duration</th>
+  </tr>
+  <tr>
+    <td>Claim → XR</td>
+    <td>Crossplane controller creates the XR</td>
+    <td>&lt; 1 second</td>
+  </tr>
+  <tr>
+    <td>Composition render</td>
+    <td>Function renders DataVolume + VM + PVC manifests</td>
+    <td>1–5 seconds</td>
+  </tr>
+  <tr>
+    <td>DataVolume import</td>
+    <td>CDI pulls the base image from the registry</td>
+    <td>1–10 minutes (image size dependent)</td>
+  </tr>
+  <tr>
+    <td>VM creation</td>
+    <td>KubeVirt creates the VM CR, virt-launcher pod spins up</td>
+    <td>10–60 seconds</td>
+  </tr>
+  <tr>
+    <td>Guest agent</td>
+    <td>cloud-init runs, guest-agent connects</td>
+    <td>1–5 minutes</td>
+  </tr>
+</table>
+
+<h3>Step 4.4 — Verify the running VM</h3>
+
+<pre><code class="kubectl"># Check the Claim's status
+kubectl get virtualmachine webserver-01 -o yaml | grep -A10 status:
+
+# Check the XR's status (mirrors the VM state)
+kubectl get xrvirtualmachine webserver-01 -o yaml | grep -A10 status:
+
+# Check the VirtualMachine phase
+kubectl get virtualmachine webserver-01 -n crossplane-system -o jsonpath='{.status.phase}'
+
+# Check the DataVolume phase
+kubectl get datavolume webserver-01 -n crossplane-system -o jsonpath='{.status.phase}'
+
+# SSH into the VM (if networking allows)
+ssh cloud-user@&lt;vm-ip&gt;</code></code></pre>
+
+<!-- ============================================================ -->
+<h2 id="troubleshooting">Troubleshooting the Lifecycle</h2>
+
+<p>When something goes wrong, follow this diagnostic sequence:</p>
+
+<h3>Troubleshooting checklist</h3>
+
+<table>
+  <tr>
+    <th>Symptom</th>
+    <th>Check</th>
+    <th>Fix</th>
+  </tr>
+  <tr>
+    <td>Claim shows <code>Ready: False</code>, no XR created</td>
+    <td><code>kubectl describe claim &lt;name&gt;</code></td>
+    <td>Check XRD is <code>Established: True</code></td>
+  </tr>
+  <tr>
+    <td>XR created but no managed resources</td>
+    <td><code>kubectl get xr &lt;name&gt; -o yaml</code></td>
+    <td>Check Composition is <code>Ready: True</code> and labels match</td>
+  </tr>
+  <tr>
+    <td>DataVolume stuck in <code>WaitForConsumer</code></td>
+    <td><code>kubectl get dv &lt;name&gt; -n crossplane-system</code></td>
+    <td>PVC consumer not linked — check Composition connections</td>
+  </tr>
+  <tr>
+    <td>VirtualMachine stuck in <code>Stopped</code></td>
+    <td><code>kubectl get vm &lt;name&gt; -n crossplane-system</code></td>
+    <td>RunStrategy is Halted — edit VM to set <code>runStrategy: Running</code></td>
+  </tr>
+  <tr>
+    <td>Composition Function pod crashing</td>
+    <td><code>kubectl logs -n crossplane-system -l app=crossplane-contrib-function-patch-and-transform</code></td>
+    <td>Check schema mismatch or missing fields in patches</td>
+  </tr>
+  <tr>
+    <td>cloud-init not applying</td>
+    <td><code>kubectl get vm &lt;name&gt; -o yaml | grep guestCustomData</code></td>
+    <td>userData must be base64-encoded; check Composition transform</td>
+  </tr>
+  <tr>
+    <td>ArgoCD shows sync failure</td>
+    <td><code>argocd app diff crossplane-infrastructure</code></td>
+    <td>Check YAML syntax and API version compatibility</td>
+  </tr>
+</table>
+
+<h3>Debugging tools</h3>
+
+<pre><code class="kubectl"># Watch reconciliation events
+kubectl get events -n crossplane-system --field-selector reason=Reconciling
+
+# Check Crossplane controller logs
+kubectl logs -n crossplane-system -l app=crossplane -f
+
+# Trace a specific XR
+kubectl get xr xrvirtualmachine.webserver-01 -o yaml
+
+# Check managed resource conditions
+kubectl get managed -n crossplane-system | grep webserver
+kubectl describe managed &lt;managed-resource-name&gt; -n crossplane-system
+
+# Check the Composition Function logs
+kubectl logs -n crossplane-system -l app=crossplane-contrib-function-patch-and-transform -f</code></code></pre>
+
+<!-- ============================================================ -->
+<h2 id="exercise">Exercise</h2>
+
+<div class="exercise">
+  <div class="exercise-title">Exercise: Create a Windows VM XRD and Composition</div>
+  <p>You've walked through the Linux VM lifecycle. Now apply what you've learned:</p>
+  <ol style="margin: 0.5rem 0 0 1.5rem;">
+    <li>Create a new XRD version <code>v1beta1</code> that adds a <code>gpu</code> field (boolean) and a <code>dataDisks</code> array</li>
+    <li>Write a Composition <code>xrvirtualmachine-windows</code> that:</li>
+    <ul style="margin: 0.5rem 0 0 1.5rem;">
+      <li>Sets <code>runStrategy: Always</code> instead of <code>Halted</code></li>
+      <li>Adds a <code>guestCustomData</code> field with PowerShell/DSC bootstrap instead of cloud-init</li>
+      <li>Creates additional PVCs for data disks from the <code>dataDisks</code> array</li>
+    </ul>
+    <li>Deploy both to your cluster via ArgoCD</li>
+    <li>Create a Claim for a Windows VM with 2 data disks and verify the provisioning flow</li>
+  </ol>
+</div>
+
+<div class="collapsible">
+  <summary>Click to reveal the answer</summary>
+  <div class="answer">
+    <h4>1. XRD v1beta1 with gpu and dataDisks</h4>
+    <pre><code>    versions:
+      - name: v1alpha1
+        served: true
+        referenceable: true
+        # ... (existing v1alpha1 schema)
+      - name: v1beta1
+        served: true
+        referenceable: true
+        schema:
+          openAPIV3Schema:
+            type: object
+            properties:
+              spec:
+                type: object
+                properties:
+                  # ... (all v1alpha1 fields)
+                  gpu:
+                    type: boolean
+                    description: Enable GPU passthrough
+                  dataDisks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        size:
+                          type: string
+                        storageClass:
+                          type: string
+                    description: Additional data disks</code></code></pre>
+
+    <h4>2. Windows Composition highlights</h4>
+    <pre><code>    # Set runStrategy
+    - type: fromCompositeFieldSet
+      from: spec.guestOS
+      to: spec.runStrategy
+      transforms:
+        - type: map
+          map:
+            linux: Halted
+            windows: Always
+
+    # PowerShell guestCustomData
+    - type: fromCompositeFieldSet
+      from: spec.userData
+      to: spec.template.spec.guestCustomData
+      transforms:
+        - type: string
+          string:
+            encode: Base64
+            fmt: |
+              &lt;powershell&gt;
+              Set-ExecutionPolicy Bypass -Scope Process -Force
+              [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{{ .userData }}')) | Out-File C:\guest-config.ps1
+              C:\guest-config.ps1
+              &lt;/powershell&gt;</code></code></pre>
+
+    <h4>3. Data disk PVCs in the Composition</h4>
+    <pre><code>    # Loop over dataDisks array (requires a Go/Lua function or manual expansion)
+    # With patchAndTransform, you'd manually list each disk:
+    - name: datadisk-0
+      base:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources: { requests: { storage: 100Gi } }
+      patches:
+        - type: fromCompositeFieldSet
+          from: spec.dataDisks[0].size
+          to: spec.resources.requests.storage
+        - type: fromCompositeFieldSet
+          from: spec.dataDisks[0].storageClass
+          to: spec.storageClassName
+
+    # Connect to VM volumes
+    - from: datadisk-0
+      to: virtualmachine
+      patches:
+        - type: toCompositeField
+          from: metadata.name
+          to: spec.template.spec.volumes[1].persistentVolumeClaim.claimName</code></code></pre>
+
+    <h4>Key insight</h4>
+    <p>The <code>patchAndTransform</code> function doesn't support true loops over arrays. For variable-length lists like <code>dataDisks</code>, you have two options:</p>
+    <ol style="margin: 0.5rem 0 0 1.5rem;">
+      <li><strong>Manual expansion</strong> — list each disk index explicitly in the Composition (simple but rigid)</li>
+      <li><strong>Custom Go/Lua function</strong> — iterate over the array and generate resources dynamically (flexible but more complex)</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="summary">Summary: The Complete Lifecycle</h2>
+
+<p>Here's the complete flow in one view:</p>
+
+<div class="flow-row">
+  <div class="flow-box"><strong>1. Design</strong><br>XRD schema<br><code>crossplane/xrd/*.yaml</code></div>
+  <span style="color: var(--accent);">→</span>
+  <div class="flow-box"><strong>2. Recipe</strong><br>Composition<br><code>crossplane/composition/*.yaml</code></div>
+  <span style="color: var(--accent);">→</span>
+  <div class="flow-box"><strong>3. Deploy</strong><br>ArgoCD sync<br><code>argocd app sync</code></div>
+  <span style="color: var(--accent);">→</span>
+  <div class="flow-box"><strong>4. Provision</strong><br>Claim → VM<br><code>kubectl apply -f claim/*.yaml</code></div>
+  <span style="color: var(--accent);">→</span>
+  <div class="flow-box"><strong>5. Verify</strong><br>Check status<br><code>kubectl get virtualmachine</code></div>
+</div>
+
+<p>The XRD is the <strong>interface</strong>, the Composition is the <strong>implementation</strong>, ArgoCD is the <strong>delivery mechanism</strong>, and the Claim is the <strong>instance</strong>. Master this cycle and you can provision any infrastructure resource — not just VMs — through the same pattern.</p>
+
+</body>
+</html>
