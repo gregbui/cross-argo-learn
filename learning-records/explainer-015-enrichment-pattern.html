@@ -298,6 +298,7 @@
     <li><a href="#argocd-integration">ArgoCD Integration</a></li>
     <li><a href="#troubleshooting">Troubleshooting</a></li>
     <li><a href="#ipam-enrichment">IPAM: Static IP Address Enrichment</a></li>
+    <li><a href="#naming-enrichment">Naming Service: Unique VM Name Enrichment</a></li>
     <li><a href="#exercise">Exercise</a></li>
   </ul>
 </div>
@@ -1166,6 +1167,110 @@ status:
   <p>IPAM enrichment often combines <strong>resource enrichment</strong> (the IPAddress CR tracks the allocation) with <strong>status enrichment</strong> (the IP is written to XR.status for the Claim consumer) and <strong>spec patching</strong> (the controller updates the VM spec with the assigned IP). This is a common pattern where enrichment reaches back into the managed resource's spec, not just the XR's status.</p>
 </div>
 
+<h3>Example 7: Naming Service — Unique VM Name Enrichment</h3>
+
+<p>When a VM claim is submitted without a specific name (or with a human-readable intent name like <code>webserver</code>), an external naming service assigns a unique, convention-compliant name for the actual VirtualMachine resource. The enrichment controller bridges the claim's intent name with the naming service's unique assignment.</p>
+
+<h4>How it works</h4>
+
+<p>The enrichment controller watches for new XRVirtualMachine claims, calls the naming service to get a unique name, creates the VirtualMachine with that assigned name, and writes the result back to the XR status.</p>
+
+<pre><code># Naming service API:
+# POST /api/v1/names
+# Body: { "intent": "webserver", "env": "production", "tier": "frontend" }
+# Response: { "name": "prod-fe-webserver-7f3a2b", "namespace": "workloads" }
+
+# Controller creates the VirtualMachine with the assigned name:
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: prod-fe-webserver-7f3a2b    # assigned by naming service
+  namespace: workloads
+  labels:
+    crossplane.io/composite: xrvirtualmachine/webserver
+    infra.example.com/naming-service: "enabled"
+    infra.example.com/naming-version: "v2"
+
+# Controller writes to XR status:
+# xr.Status.EnrichedName = "prod-fe-webserver-7f3a2b"
+# xr.Status.EnrichedNamespace = "workloads"
+# xr.Status.EnrichedNamingVersion = "v2"</code></code></pre>
+
+<h4>Controller reconciliation (simplified)</h4>
+
+<pre><code>func (r *NamingReconciler) Reconcile(ctx context.Context, req controller.Request) (controller.Result, error) {
+    vm := &kubevirtv1.VirtualMachine{}
+    r.Get(ctx, req.NamespacedName, vm)
+
+    xrName, found := vm.Labels["crossplane.io/composite"]
+    if !found { return controller.Result{}, nil }
+
+    xr := &infrav1.XRVirtualMachine{}
+    r.Get(ctx, types.NamespacedName{Name: xrName}, xr)
+
+    // Check if XR already has an assigned name
+    if xr.Status.EnrichedName != "" {
+        return controller.Result{}, nil
+    }
+
+    // Call naming service for a unique name
+    namingReq := &naming.Request{
+        Intent: xr.Name,              // e.g., "webserver"
+        Env:    xr.Labels["env"],     // e.g., "production"
+        Tier:   xr.Labels["tier"],    // e.g., "frontend"
+    }
+    assigned, err := r.namingClient.AssignName(ctx, namingReq)
+    if err != nil {
+        return controller.Result{RequeueAfter: 30 * time.Second}, err
+    }
+
+    // Update the VirtualMachine name (or recreate if already created)
+    vm.Name = assigned.Name
+    vm.Namespace = assigned.Namespace
+    if err := r.Update(ctx, vm); err != nil {
+        return controller.Result{}, err
+    }
+
+    // Write to XR status
+    xr.Status.EnrichedName = assigned.Name
+    xr.Status.EnrichedNamespace = assigned.Namespace
+    xr.Status.EnrichedNamingVersion = assigned.Version
+    r.Status().Update(ctx, xr)
+
+    return controller.Result{}, nil
+}</code></code></pre>
+
+<h4>Key design considerations</h4>
+
+<table>
+  <tr>
+    <th>Concern</th>
+    <th>Approach</th>
+  </tr>
+  <tr>
+    <td>VM already created with claim name before enrichment</td>
+    <td>Controller detects mismatch and recreates VM with assigned name, or patches the XR to use the assigned name going forward</td>
+  </tr>
+  <tr>
+    <td>Naming service unavailable</td>
+    <td>Controller falls back to a deterministic naming formula (e.g., <code>{intent}-{random-8chars}</code>) as a backup</td>
+  </tr>
+  <tr>
+    <td>Name collision across namespaces</td>
+    <td>Naming service returns both name and namespace; controller ensures uniqueness at the cluster level</td>
+  </tr>
+  <tr>
+    <td>Claim name vs. VM name confusion</td>
+    <td>Always reference the XR by its original claim name; the enriched name is the VM's actual name, stored in status</td>
+  </tr>
+</table>
+
+<div class="note">
+  <div class="note-title">When enrichment is the right choice for naming</div>
+  <p>Use the enrichment pattern when the naming service has business rules beyond simple formatting — e.g., collision avoidance across clusters, environment-aware conventions, tier-based prefixes, or version tracking. If the naming logic is just <code>{claim-name}-{random-suffix}</code>, handle it in the Composition with a <code>patchAndTransform</code> string format instead.</p>
+  <p>The key signal: if the naming service has its own API, state, and versioning, it deserves its own enrichment controller.</p>
+</div>
+
 <h2 id="argocd-integration">ArgoCD Integration</h2>
 
 <p>External enrichment controllers should be deployed via ArgoCD alongside the Crossplane infrastructure. This keeps the entire stack GitOps-managed.</p>
@@ -1447,7 +1552,7 @@ spec:
   <li><strong>RBAC</strong> — External controllers need explicit permissions to read XRs and write to their status</li>
 </ul>
 
-<p>Enrichment turns a bare VM into a production-ready workload: it gets DNS, monitoring, security scanning, certificates, network policies, and static IP addresses from IPAM — all managed by specialized external controllers that observe the XR and act independently.</p>
+<p>Enrichment turns a bare VM into a production-ready workload: it gets DNS, monitoring, security scanning, certificates, network policies, static IP addresses from IPAM, and unique names from a naming service — all managed by specialized external controllers that observe the XR and act independently.</p>
 
 </body>
 </html>
