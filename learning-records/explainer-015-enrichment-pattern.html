@@ -297,8 +297,6 @@
     <li><a href="#concrete-examples">Concrete Examples</a></li>
     <li><a href="#argocd-integration">ArgoCD Integration</a></li>
     <li><a href="#troubleshooting">Troubleshooting</a></li>
-    <li><a href="#ipam-enrichment">IPAM: Static IP Address Enrichment</a></li>
-    <li><a href="#naming-enrichment">Naming Service: Unique VM Name Enrichment</a></li>
     <li><a href="#exercise">Exercise</a></li>
   </ul>
 </div>
@@ -903,7 +901,7 @@ subjects:
 <!-- ============================================================ -->
 <h2 id="concrete-examples">Concrete Examples</h2>
 
-<h3>Example 1: DNS Enrichment (Route53 / Cloudflare)</h3>
+<h3 id="dns-enrichment">Example 1: DNS Enrichment (Route53 / Cloudflare)</h3>
 
 <p>An external controller watches Crossplane-managed VirtualMachines and creates DNS records in Route53 or Cloudflare:</p>
 
@@ -927,7 +925,7 @@ status:
 # Controller writes to XR status:
 # xr.Status.EnrichedDNS = "vm-01.infra.local"</code></code></pre>
 
-<h3>Example 2: Monitoring Enrichment (Prometheus ServiceMonitor)</h3>
+<h3 id="monitoring-enrichment">Example 2: Monitoring Enrichment (Prometheus ServiceMonitor)</h3>
 
 <p>A controller watches XRs and creates Prometheus ServiceMonitors for VM endpoints:</p>
 
@@ -952,7 +950,7 @@ spec:
 # xr.Status.Monitoring.Enabled = true
 # xr.Status.Monitoring.Endpoint = "http://10.0.1.42:8080/metrics"</code></code></pre>
 
-<h3>Example 3: Security Enrichment (Vulnerability Scanning)</h3>
+<h3 id="security-enrichment">Example 3: Security Enrichment (Vulnerability Scanning)</h3>
 
 <p>A controller watches VMs and triggers security scans, writing results to XR status:</p>
 
@@ -975,7 +973,7 @@ spec:
 # xr.Status.SecurityScan.LastScan = "2024-01-15T10:30:00Z"
 # xr.Status.SecurityScan.CriticalCVEs = ["CVE-2024-1234", "CVE-2024-5678"]</code></code></pre>
 
-<h3>Example 4: Certificate Enrichment (cert-manager / Vault)</h3>
+<h3 id="certificate-enrichment">Example 4: Certificate Enrichment (cert-manager / Vault)</h3>
 
 <p>A controller watches XRs and creates Certificate resources for VM TLS termination:</p>
 
@@ -1004,7 +1002,7 @@ spec:
 # xr.Status.Certificate.SecretName = "vm-01-tls-secret"
 # xr.Status.Certificate.Expires = "2025-01-15T00:00:00Z"</code></code></pre>
 
-<h3>Example 5: Network Policy Enrichment</h3>
+<h3 id="network-policy-enrichment">Example 5: Network Policy Enrichment</h3>
 
 <p>A controller watches XRs and creates OpenShift NetworkPolicies for VM traffic:</p>
 
@@ -1047,7 +1045,7 @@ spec:
 # xr.Status.NetworkPolicy.EgressRules = 1</code></code></pre>
 
 <!-- ============================================================ -->
-<h3 id="ipam-enrichment">Example 6: IPAM — Static IP Address Enrichment</h3>
+<h3>Example 6: IPAM — Static IP Address Enrichment</h3>
 
 <p>When a VM needs a static IP address managed by an external IPAM (IP Address Management) system — such as a dedicated IPAM service, a network controller, or cross-cluster address coordination — the enrichment pattern provides the bridge between Crossplane's VM provisioning and the IPAM's address assignment.</p>
 
@@ -1167,7 +1165,7 @@ status:
   <p>IPAM enrichment often combines <strong>resource enrichment</strong> (the IPAddress CR tracks the allocation) with <strong>status enrichment</strong> (the IP is written to XR.status for the Claim consumer) and <strong>spec patching</strong> (the controller updates the VM spec with the assigned IP). This is a common pattern where enrichment reaches back into the managed resource's spec, not just the XR's status.</p>
 </div>
 
-<h3 id="naming-enrichment">Example 7: Naming Service — Unique VM Name Enrichment</h3>
+<h3>Example 7: Naming Service — Unique VM Name Enrichment</h3>
 
 <p>When a VM claim is submitted without a specific name (or with a human-readable intent name like <code>webserver</code>), an external naming service assigns a unique, convention-compliant name for the actual VirtualMachine resource. The enrichment controller bridges the claim's intent name with the naming service's unique assignment.</p>
 
