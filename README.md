@@ -62,6 +62,7 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-014-xrd-composition-lifecycle.html           # XRD & Composition lifecycle — step-by-step walkthrough
     ├── explainer-015-enrichment-pattern.html              # Enrichment pattern — external controllers for XRs
     ├── explainer-016-external-controllers.html              # External controllers deep dive: K8s controllers, Crossplane controllers, InfoBlox IPAM
+    ├── diagram-k8s-external-controllers.svg              # Controller lifecycle diagram
 ```
 
 ## Explainers

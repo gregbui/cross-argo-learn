@@ -446,6 +446,12 @@ func (r *IPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 <p>External controllers fill these gaps. They watch Crossplane resources (XRs, Managed Resources, or Claims) and perform actions against external APIs.</p>
 
+<div class="diagram">
+  <div class="diagram-title">Kubernetes Controller Lifecycle — External Controllers in Crossplane</div>
+  <img src="diagram-k8s-external-controllers.svg" alt="Kubernetes Controller Lifecycle Diagram" style="max-width:100%; border:1px solid var(--border); border-radius:8px;"/>
+</div>
+
+
 <h3 id="patterns">Three patterns</h3>
 
 <p>There are three established patterns for external controllers in the Crossplane ecosystem. Each has different tradeoffs.</p>
