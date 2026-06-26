@@ -20,3 +20,4 @@ A 25-task, 6-phase plan to build a Crossplane + ArgoCD + OpenShift Virtualizatio
 - **Explainer 5** (`learning-records/explainer-005-end-to-end-runbooks.html`) — End-to-end walkthrough, runbooks
 - **Explainer 6** (`learning-records/explainer-006-vm-workload-dev.html`) — OS images, cloud-init, guest agents
 - **Explainer 7** (`learning-records/explainer-007-xrd-composition-vm-deep-dive.html`) — XRD & Composition deep dive for VM workloads
+- **Explainer 8** (`learning-records/explainer-016-external-controllers.html`) — External controllers deep dive: K8s controller fundamentals, Crossplane built-in controllers, InfoBlox IPAM full example

@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>External Controllers — Deep Dive for Crossplane</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  h4 {
+    font-size: 1rem;
+    color: var(--accent-purple);
+    margin-top: 1.2rem;
+    margin-bottom: 0.5rem;
+  }
+  p { margin-bottom: 1rem; }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9em;
+  }
+  :not(pre) > code {
+    background: var(--surface);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+  .note {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .note-title {
+    font-weight: bold;
+    color: var(--accent);
+    margin-bottom: 0.25rem;
+  }
+  .warning {
+    background: var(--surface);
+    border-left: 3px solid var(--accent-orange);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .warning-title {
+    font-weight: bold;
+    color: var(--accent-orange);
+    margin-bottom: 0.25rem;
+  }
+  .danger {
+    background: var(--surface);
+    border-left: 3px solid var(--accent-red);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .danger-title {
+    font-weight: bold;
+    color: var(--accent-red);
+    margin-bottom: 0.25rem;
+  }
+  .exercise {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    margin: 1.5rem 0;
+  }
+  .exercise-title {
+    font-weight: bold;
+    color: var(--accent-green);
+    margin-bottom: 0.5rem;
+  }
+  .collapsible {
+    margin: 1rem 0;
+  }
+  .collapsible summary {
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--accent-green);
+    font-weight: bold;
+    user-select: none;
+  }
+  .collapsible summary:hover {
+    background: var(--border);
+  }
+  .collapsible .answer {
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 0 0 6px 6px;
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .toc h3 {
+    margin-top: 0;
+    color: #f0f6fc;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc ul ul {
+    padding-left: 1.2rem;
+    margin-top: 0.2rem;
+  }
+  .toc li {
+    padding: 0.2rem 0;
+  }
+  .toc li a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .toc li a:hover {
+    text-decoration: underline;
+  }
+  .flow-arrow {
+    text-align: center;
+    font-size: 1.5rem;
+    color: var(--accent);
+    margin: 0.5rem 0;
+  }
+  .flow-box {
+    display: inline-block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    margin: 0.25rem;
+    font-size: 0.85rem;
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+  }
+  th {
+    background: var(--surface);
+    color: #f0f6fc;
+    font-weight: bold;
+  }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+  .diagram-title {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+  }
+  .step-number {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--bg);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 28px;
+    font-weight: bold;
+    font-size: 0.85rem;
+    margin-right: 0.5rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>External Controllers — Deep Dive for Crossplane</h1>
+
+<p>External controllers are the bridge between Crossplane's declarative resource model and the real world — APIs, databases, message queues, and infrastructure systems that don't speak Kubernetes. This explainer covers the full lifecycle: from Kubernetes controller fundamentals, through Crossplane's external controller patterns, to a production-grade InfoBlox IPAM example.</p>
+
+<div class="toc">
+  <h3>Table of Contents</h3>
+  <ul>
+    <li><a href="#k8s-controllers">1. Kubernetes Controllers — The Foundation</a>
+      <ul>
+        <li><a href="#controller-runtime">The controller-runtime library</a></li>
+        <li><a href="#reconcile-loop">The reconcile loop</a></li>
+        <li><a href="#watch-pattern">The watch pattern</a></li>
+      </ul>
+    </li>
+    <li><a href="#crossplane-controllers">2. Crossplane's Built-in Controllers</a>
+      <ul>
+        <li><a href="#composite-controller">Composite (XR) Controller</a></li>
+        <li><a href="#claim-controller">Claim Controller</a></li>
+        <li><a href="#composition-controller">Composition Controller</a></li>
+        <li><a href="#provider-controller">Provider Controller</a></li>
+      </ul>
+    </li>
+    <li><a href="#external-controllers">3. External Controllers — Where Crossplane Stops</a>
+      <ul>
+        <li><a href="#why-external">Why external controllers exist</a></li>
+        <li><a href="#patterns">Three patterns</a></li>
+        <li><a href="#pattern-comparison">Pattern comparison</a></li>
+      </ul>
+    </li>
+    <li><a href="#infoblox">4. InfoBlox IPAM — Full Example</a>
+      <ul>
+        <li><a href="#infoblox-context">Context and API</a></li>
+        <li><a href="#infoblox-types">Go types</a></li>
+        <li><a href="#infoblox-client">HTTP client</a></li>
+        <li><a href="#infoblox-reconciler">Reconciler</a></li>
+        <li><a href="#infoblox-xrd">XRD definition</a></li>
+        <li><a href="#infoblox-composition">Composition</a></li>
+      </ul>
+    </li>
+    <li><a href="#patterns">5. Common Patterns</a>
+      <ul>
+        <li><a href="#idempotency">Idempotency</a></li>
+        <li><a href="#error-handling">Error handling and backoff</a></li>
+        <li><a href="#secrets">Secret management</a></li>
+        <li><a href="#health-checks">Health checks</a></li>
+      </ul>
+    </li>
+    <li><a href="#exercise">6. Exercise</a></li>
+    <li><a href="#summary">Summary</a></li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="k8s-controllers">1. Kubernetes Controllers — The Foundation</h2>
+<!-- ============================================================ -->
+
+<p>Before understanding Crossplane external controllers, you need to understand Kubernetes controllers. Every Kubernetes controller follows the same fundamental pattern: watch for changes to resources, compare desired state to actual state, and make them match.</p>
+
+<h3 id="controller-runtime">The controller-runtime library</h3>
+
+<p>Most Go-based Kubernetes controllers use <code>controller-runtime</code>, the official client library maintained by the Kubernetes SIG-APISig. It provides:</p>
+
+<ul>
+  <li><code>Controller</code> — manages the reconcile loop and event watching</li>
+  <li><code>Reconciler</code> interface — your business logic lives here</li>
+  <li><code>Client</code> — typed CRUD operations against the K8s API</li>
+  <li><code>Builder</code> — fluent API for setting up watches and predicates</li>
+  <li><code>Manager</code> — bootstraps the controller manager, caches, and leader election</li>
+</ul>
+
+<p>Every controller implements <code>Reconcile(ctx, request) (result, err)</code>. That's the entire contract.</p>
+
+<h3 id="reconcile-loop">The reconcile loop</h3>
+
+<p>Here's the minimal reconcile loop. Everything else is optimization.</p>
+
+<pre><code>type IPAMReconciler struct {
+    client.Client
+    scheme   *runtime.Scheme
+    infoBlox *infoblox.Client
+}
+
+func (r *IPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+    // 1. Fetch the resource
+    ipReq := &infrav1.IPAddressRequest{}
+    if err := r.Get(ctx, req.NamespacedName, ipReq); err != nil {
+        return ctrl.Result{}, client.IgnoreNotFound(err)
+    }
+
+    // 2. Check if deletion is requested
+    if !ipReq.DeletionTimestamp.IsZero() {
+        return r.handleDeletion(ctx, ipReq)
+    }
+
+    // 3. Ensure finalizer exists
+    if !contains(ipReq.Finalizers, "ipam.infra.example.com/finalizer") {
+        ipReq.Finalizers = append(ipReq.Finalizers, "ipam.infra.example.com/finalizer")
+        if err := r.Update(ctx, ipReq); err != nil {
+            return ctrl.Result{}, err
+        }
+    }
+
+    // 4. Reconcile desired state
+    return r.reconcileIP(ctx, ipReq)
+}</code></code></pre>
+
+<p>The loop has four phases: <strong>fetch</strong> → <strong>deletion check</strong> → <strong>finalizer guard</strong> → <strong>reconcile</strong>. Every production controller follows this structure.</p>
+
+<h3 id="watch-pattern">The watch pattern</h3>
+
+<p>Controllers don't poll. They watch. The <code>ctrl.NewControllerManagedBy</code> builder sets up informers that watch the K8s API for changes:</p>
+
+<pre><code>func (r *IPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
+    return ctrl.NewControllerManagedBy(mgr).
+        For(&infrav1.IPAddressRequest{}).
+        Watches(
+            &source.Kind{Type: &corev1.Secret{}},
+            handler.EnqueueRequestsFromMapFunc(r.secretsToIPAMRequests),
+        ).
+        WithOptions(controller.Options{
+            MaxConcurrentReconciles: 3,
+        }).
+        Complete(r)
+}</code></code></pre>
+
+<p><code>For()</code> watches the primary resource. <code>Watches()</code> watches secondary resources and maps their events to primary reconcile requests. This is how external controllers react to changes in dependent resources — like a secret containing API credentials being updated.</p>
+
+<div class="note">
+  <div class="note-title">Key insight</div>
+  The reconcile loop is <strong>event-driven, not polling</strong>. Informers maintain a local cache of watched resources. When the K8s API server pushes a change, the informer calls your <code>Reconcile</code> function. This is why idempotency matters — the loop may call <code>Reconcile</code> multiple times for the same resource.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="crossplane-controllers">2. Crossplane's Built-in Controllers</h2>
+<!-- ============================================================ -->
+
+<p>Crossplane runs four controllers inside the <code>crossplane</code> pod. Each manages a specific layer of the abstraction stack. External controllers operate <em>outside</em> this stack, watching Crossplane resources as their trigger.</p>
+
+<div class="diagram">
+  <div class="diagram-title">Crossplane Controller Architecture</div>
+  <div class="flow-row">
+    <div class="flow-box" style="background:rgba(188,140,255,0.15);color:var(--accent-purple);border:1px solid rgba(188,140,255,0.3);"><strong>User</strong><br>Creates Claim</div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-row">
+    <div class="flow-box" style="background:rgba(88,166,255,0.15);color:var(--accent);border:1px solid rgba(88,166,255,0.3);"><strong>Claim Controller</strong><br>Claim → XR</div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-row">
+    <div class="flow-box" style="background:rgba(210,153,34,0.15);color:var(--accent-orange);border:1px solid rgba(210,153,34,0.3);"><strong>Composition Controller</strong><br>XR → Managed Resources</div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-row">
+    <div class="flow-box" style="background:rgba(63,185,80,0.15);color:var(--accent-green);border:1px solid rgba(63,185,80,0.3);"><strong>Provider</strong><br>Managed CR → Real API</div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-row">
+    <div class="flow-box" style="background:rgba(57,210,192,0.15);color:var(--accent-cyan);border:1px solid rgba(57,210,192,0.3);"><strong>External System</strong><br>(InfoBlox, DNS, etc.)</div>
+  </div>
+</div>
+
+<h3 id="composite-controller">Composite (XR) Controller</h3>
+
+<p>Watches <code>XResource</code> objects. Ensures the XR's <code>status.conditions</code> reflect lifecycle state (Creating, Ready, Deleting, Error). Does not create or manage child resources — that's the Composition controller's job.</p>
+
+<h3 id="claim-controller">Claim Controller</h3>
+
+<p>Watches <code>Claim</code> objects. When a Claim is created, it creates a corresponding XR by copying <code>spec.parameters</code> into the XR's <code>spec</code>. Also binds the XR back to the Claim via <code>spec.claimRef</code>.</p>
+
+<h3 id="composition-controller">Composition Controller</h3>
+
+<p>Watches XRs. When an XR is created or updated, the Composition controller executes the Composition (either declarative or via Composition Functions) to create/update Managed Resources. It patches the XR's <code>status.atProvider</code> with results from the Composition.</p>
+
+<h3 id="provider-controller">Provider Controller</h3>
+
+<p>Watches Managed Resources created by the Composition. The provider (a separate deployment, e.g., the KubeVirt provider) reads the Managed Resource CR and calls the external cloud API to create the actual infrastructure. This is the <em>last step</em> of the Crossplane pipeline.</p>
+
+<div class="note">
+  <div class="note-title">Where external controllers fit</div>
+  Crossplane's built-in controllers handle <strong>provisioning</strong> — creating resources in the target system. External controllers handle <strong>everything else</strong>: enrichment, post-provisioning configuration, cross-system coordination, and ongoing state reconciliation that falls outside Crossplane's provisioning scope.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="external-controllers">3. External Controllers — Where Crossplane Stops</h2>
+<!-- ============================================================ -->
+
+<h3 id="why-external">Why external controllers exist</h3>
+
+<p>Crossplane excels at managing resources that have a Kubernetes CRD proxy (via Providers). But many systems don't fit this model:</p>
+
+<ul>
+  <li><strong>No CRD provider exists</strong> — InfoBlox IPAM, legacy DNS systems, custom internal APIs</li>
+  <li><strong>Stateful enrichment needed</strong> — assigning static IPs, registering DNS records, generating names</li>
+  <li><strong>Cross-system coordination</strong> — syncing state between K8s and non-K8s systems</li>
+  <li><strong>Ongoing reconciliation</strong> — the provisioned resource needs monitoring beyond initial creation</li>
+</ul>
+
+<p>External controllers fill these gaps. They watch Crossplane resources (XRs, Managed Resources, or Claims) and perform actions against external APIs.</p>
+
+<h3 id="patterns">Three patterns</h3>
+
+<p>There are three established patterns for external controllers in the Crossplane ecosystem. Each has different tradeoffs.</p>
+
+<h4>Pattern 1: Status Enrichment</h4>
+
+<p>The controller reads an XR, calls an external API, and writes the result back to <code>XR.status</code>. The Composition can then read from <code>status</code> and patch it into child resources.</p>
+
+<div class="flow-row">
+  <div class="flow-box">XR created</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">External controller watches XR</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">Calls InfoBlox API</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">Writes IP to XR.status.atProvider</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">Composition reads status, patches VM</div>
+</div>
+
+<pre><code># External controller writes to XR status
+apiVersion: infra.example.com/v1alpha1
+kind: XVirtualMachine
+metadata:
+  name: xvirtualmachine-web-server
+spec:
+  compositionSelector:
+    matchLabels:
+      infra.example.com/kubevirt: "true"
+status:
+  atProvider:
+    ipAddress: "10.20.30.45"
+    hostname: "web-server-01.infra.local"</code></code></pre>
+
+<div class="warning">
+  <div class="warning-title">Limitation</div>
+  Composition Functions can read <code>status.atProvider</code> fields, but the standard Patch-and-Transform function has limited support for reading from status. Go-Templating functions have full access. This is the main reason Go-Templating is preferred for enrichment workflows.
+</div>
+
+<h4>Pattern 2: Resource Creation</h4>
+
+<p>The controller creates a separate Kubernetes resource (not managed by Crossplane's Composition) based on XR state. The external resource is owned by the XR via <code>SetControllerReference</code>, ensuring garbage collection.</p>
+
+<div class="flow-row">
+  <div class="flow-box">XR created</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">Composition provisions VM</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">External controller watches XR</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">Creates DNSRecord CR</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">DNS controller calls external DNS API</div>
+</div>
+
+<pre><code>apiVersion: dns.infra.example.com/v1alpha1
+kind: DNSRecord
+metadata:
+  name: web-server-01
+  ownerReferences:
+  - apiVersion: infra.example.com/v1alpha1
+    kind: XVirtualMachine
+    name: xvirtualmachine-web-server
+    controller: true
+spec:
+  hostname: web-server-01.infra.local
+  ip: 10.20.30.45
+  zone: infra.local</code></code></pre>
+
+<h4>Pattern 3: Secret Enrichment</h4>
+
+<p>The controller enriches the connection secret that Crossplane creates for the XR. Useful for credentials, API endpoints, or connection strings that come from external systems.</p>
+
+<div class="flow-row">
+  <div class="flow-box">XR created</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">Crossplane creates secret</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">External controller watches secret</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">Fetches credentials from vault</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box">Updates secret with additional fields</div>
+</div>
+
+<h3 id="pattern-comparison">Pattern comparison</h3>
+
+<table>
+  <thead>
+    <tr><th>Criterion</th><th>Status Enrichment</th><th>Resource Creation</th><th>Secret Enrichment</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Best for</td>
+      <td>Simple data injection</td>
+      <td>Complex external resources</td>
+      <td>Credentials and connection info</td>
+    </tr>
+    <tr>
+      <td>Visibility</td>
+      <td>XR status (hidden from end users)</td>
+      <td>Separate CR (visible in kubectl)</td>
+      <td>Secret (sensitive, obscured)</td>
+    </tr>
+    <tr>
+      <td>Composition access</td>
+      <td>Go-Templating can read status</td>
+      <td>Patch-and-Transform can cross-reference</td>
+      <td>Secret mounted as env/volume</td>
+    </tr>
+    <tr>
+      <td>Lifecycle</td>
+      <td>Tied to XR lifecycle</td>
+      <td>Garbage-collected via ownerRef</td>
+      <td>Tied to XR lifecycle</td>
+    </tr>
+    <tr>
+      <td>Complexity</td>
+      <td>Low</td>
+      <td>High (new CRD + controller)</td>
+      <td>Medium</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="infoblox">4. InfoBlox IPAM — Full Example</h2>
+<!-- ============================================================ -->
+
+<p>This section walks through building a complete external controller that assigns static IP addresses from InfoBlox Grid Manager. The controller watches <code>IPAddressRequest</code> XRs, calls the InfoBlox WAPI, and writes the assigned IP back to the XR status.</p>
+
+<h3 id="infoblox-context">Context and API</h3>
+
+<p>InfoBlox is an enterprise IP address management (IPAM) system. The WAPI (Web API) is a RESTful JSON API. Key endpoints:</p>
+
+<ul>
+  <li><code>GET /wapi/v2.13/ipaddr/ipv4/{ip}</code> — Check if an IP is available</li>
+  <li><code>POST /wapi/v2.13/record:a</code> — Create an A record (reserves the IP)</li>
+  <li><code>GET /wapi/v2.13/network/{network_ref}</code> — List available IPs in a network</li>
+  <li><code>DELETE /wapi/v2.13/record:a/{record_ref}</code> — Remove a DNS record (releases IP)</li>
+</ul>
+
+<p>Auth is typically basic auth (username/password) or certificate-based. All responses include <code>_ref</code> fields — unique identifiers for every object that you need for updates and deletes.</p>
+
+<h3 id="infoblox-types">Go types</h3>
+
+<p>First, define the types that map to the InfoBlox WAPI:</p>
+
+<pre><code>package infoblox
+
+import "encoding/json"
+
+// Client talks to InfoBlox WAPI.
+type Client struct {
+    BaseURL    string
+    Username   string
+    Password   string
+    HTTPClient *http.Client
+}
+
+// AllocRequest is what the external controller receives from the XR.
+type AllocRequest struct {
+    NetworkView string `json:"network_view"`
+    Network     string `json:"network"`
+    Hostname    string `json:"hostname"`
+    Description string `json:"description,omitempty"`
+}
+
+// AllocResponse is what the controller writes back.
+type AllocResponse struct {
+    IP        string `json:"ip"`
+    RecordRef string `json:"record_ref"`
+    Network   string `json:"network"`
+}
+
+// WAPIARecord is the JSON structure for creating an A record.
+type WAPIARecord struct {
+    Name        string `json:"name"`
+    Clustertype string `json:"view"`
+    Ptrdname    string `json:"ptrdname,omitempty"`
+    Comment     string `json:"comment,omitempty"`
+}
+
+// WAPIResponse is the standard InfoBlox WAPI response wrapper.
+type WAPIResponse struct {
+    Ref  string `json:"_ref"`
+    Text string `json:"text,omitempty"`
+}
+
+// WAPIError is returned on WAPI failures.
+type WAPIError struct {
+    Code    int    `json:"Error"`
+    Reason  string `json:"reason"`
+    Fields  string `json:"fields,omitempty"`
+}
+
+// NominatedAddress is returned when searching for available IPs.
+type NominatedAddress struct {
+    Address string `json:"address"`
+    Ref     string `json:"_ref"`
+}</code></code></pre>
+
+<h3 id="infoblox-client">HTTP client</h3>
+
+<p>Implement the HTTP interactions with InfoBlox:</p>
+
+<pre><code>package infoblox
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+)
+
+func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error) {
+    var reqBody io.Reader
+    if body != nil {
+        b, err := json.Marshal(body)
+        if err != nil {
+            return nil, fmt.Errorf("marshal request body: %w", err)
+        }
+        reqBody = bytes.NewReader(b)
+    }
+
+    req, err := http.NewRequest(method, c.BaseURL+path, reqBody)
+    if err != nil {
+        return nil, fmt.Errorf("create request: %w", err)
+    }
+    req.SetBasicAuth(c.Username, c.Password)
+    req.Header.Set("Content-Type", "application/json")
+
+    resp, err := c.HTTPClient.Do(req)
+    if err != nil {
+        return nil, fmt.Errorf("execute request: %w", err)
+    }
+    defer resp.Body.Close()
+
+    respBody, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, fmt.Errorf("read response: %w", err)
+    }
+
+    if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+        var apiErr WAPIError
+        if err := json.Unmarshal(respBody, &apiErr); err == nil {
+            return nil, fmt.Errorf("WAPI error %d: %s", apiErr.Code, apiErr.Reason)
+        }
+        return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+    }
+
+    return respBody, nil
+}
+
+// AllocateIP reserves an IP in InfoBlox and creates an A record.
+func (c *Client) AllocateIP(req AllocRequest) (*AllocResponse, error) {
+    // Step 1: Nominate an IP from the network
+    nominatePath := fmt.Sprintf(
+        "/wapi/v2.13/ipaddr/ipv4/%s?_function=nominate&nominated=%d",
+        req.Network, 1,
+    )
+    body, err := c.doRequest("POST", nominatePath, nil)
+    if err != nil {
+        return nil, fmt.Errorf("nominate IP: %w", err)
+    }
+
+    var nominated []NominatedAddress
+    if err := json.Unmarshal(body, &nominated); err != nil {
+        return nil, fmt.Errorf("unmarshal nomination response: %w", err)
+    }
+    if len(nominated) == 0 {
+        return nil, fmt.Errorf("no IP available in network %s", req.Network)
+    }
+
+    ip := nominated[0].Address
+
+    // Step 2: Create the A record (this reserves the IP)
+    aRecord := WAPIARecord{
+        Name:        req.Hostname,
+        Clustertype: req.NetworkView,
+        Comment:     req.Description,
+    }
+
+    body, err = c.doRequest("POST", "/wapi/v2.13/record:a", aRecord)
+    if err != nil {
+        return nil, fmt.Errorf("create A record: %w", err)
+    }
+
+    var wapiResp WAPIResponse
+    if err := json.Unmarshal(body, &wapiResp); err != nil {
+        return nil, fmt.Errorf("unmarshal A record response: %w", err)
+    }
+
+    return &AllocResponse{
+        IP:        ip,
+        RecordRef: wapiResp.Ref,
+        Network:   req.Network,
+    }, nil
+}
+
+// ReleaseIP removes an A record, freeing the IP in InfoBlox.
+func (c *Client) ReleaseIP(recordRef string) error {
+    _, err := c.doRequest("DELETE", recordRef, nil)
+    return err
+}</code></code></pre>
+
+<div class="note">
+  <div class="note-title">Nominate function</div>
+  InfoBlox's <code>_function=nominate</code> is the key to IP assignment. It atomically selects an available IP from a network range and reserves it temporarily. Without nomination, two controllers could pick the same IP. The A record creation is what makes the reservation permanent.
+</div>
+
+<h3 id="infoblox-reconciler">Reconciler</h3>
+
+<p>The controller that ties everything together. It watches <code>IPAddressRequest</code> XRs and calls the InfoBlox client:</p>
+
+<pre><code>package controllers
+
+import (
+    "context"
+    "fmt"
+    "time"
+
+    infrav1 "github.com/example/infra-api/api/v1alpha1"
+    "github.com/example/ipam-controller/pkg/infoblox"
+    "k8s.io/apimachinery/pkg/api/meta"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/apimachinery/pkg/types"
+    ctrl "sigs.k8s.io/controller-runtime"
+    "sigs.k8s.io/controller-runtime/pkg/client"
+    "sigs.k8s.io/controller-runtime/pkg/controller"
+    "sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+// IPAddressRequestReconciler watches XRVirtualMachine XRs
+// and assigns static IPs from InfoBlox.
+type IPAddressRequestReconciler struct {
+    client.Client
+    scheme       *runtime.Scheme
+    infoBlox     *infoblox.Client
+    leaseTimeout time.Duration
+}
+
+func (r *IPAddressRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+    // 1. Fetch the XR
+    xr := &infrav1.XRVirtualMachine{}
+    if err := r.Get(ctx, req.NamespacedName, xr); err != nil {
+        return ctrl.Result{}, client.IgnoreNotFound(err)
+    }
+
+    // 2. Skip if already has an IP assigned
+    if xr.Status.AtProvider.IPAddress != "" {
+        return ctrl.Result{}, nil
+    }
+
+    // 3. Check if XR is ready for IP assignment
+    //    (VM must be provisioned first — wait for Composition to finish)
+    if !meta.IsStatusConditionTrue(xr.Status.Conditions, "Ready") {
+        // Requeue after a delay — VM not ready yet
+        return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+    }
+
+    // 4. Allocate IP from InfoBlox
+    ipReq := infoblox.AllocRequest{
+        NetworkView: xr.Spec.NetworkView,
+        Network:     xr.Spec.Network,
+        Hostname:    xr.Name,
+        Description: fmt.Sprintf("VM %s allocated by Crossplane", xr.Name),
+    }
+
+    resp, err := r.infoBlox.AllocateIP(ipReq)
+    if err != nil {
+        // Update XR status with error condition
+        meta.SetStatusCondition(&xr.Status.Conditions, metav1.Condition{
+            Type:   "IPAddressAssigned",
+            Status: metav1.ConditionFalse,
+            Reason: "InfoBloxError",
+            Message: fmt.Sprintf("Failed to allocate IP: %v", err),
+        })
+        if updateErr := r.Client.Status().Update(ctx, xr); updateErr != nil {
+            return ctrl.Result{}, updateErr
+        }
+        // Requeue with backoff
+        return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+    }
+
+    // 5. Write IP to XR status
+    xr.Status.AtProvider.IPAddress = resp.IP
+    xr.Status.AtProvider.Hostname = xr.Name + ".infra.local"
+    meta.SetStatusCondition(&xr.Status.Conditions, metav1.Condition{
+        Type:   "IPAddressAssigned",
+        Status: metav1.ConditionTrue,
+        Reason: "IPAllocated",
+        Message: fmt.Sprintf("Assigned IP %s from network %s", resp.IP, resp.Network),
+    })
+
+    if err := r.Client.Status().Update(ctx, xr); err != nil {
+        return ctrl.Result{}, err
+    }
+
+    return ctrl.Result{}, nil
+}
+
+func (r *IPAddressRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
+    return ctrl.NewControllerManagedBy(mgr).
+        For(&infrav1.XRVirtualMachine{}).
+        WithOptions(controller.Options{
+            MaxConcurrentReconciles: 5,
+        }).
+        Complete(r)
+}</code></code></pre>
+
+<h3 id="infoblox-xrd">XRD definition</h3>
+
+<p>The XR schema needs fields that the controller reads and fields where it writes results:</p>
+
+<pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: ExtendedResourceDefinition
+metadata:
+  name: xvirtualmachines.infra.example.com
+spec:
+  group: infra.example.com
+  names:
+    kind: XRVirtualMachine
+    plural: xvirtualmachines
+  connectionSecretKeys:
+  - credentials
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              networkView:
+                type: string
+                description: "InfoBlox network view (e.g., Default)"
+              network:
+                type: string
+                description: "InfoBlox network grid member reference"
+              parameters:
+                type: object
+                properties:
+                  compute:
+                    type: object
+                    properties:
+                      vcpus: { type: integer }
+                      memory: { type: string }
+                  storage:
+                    type: object
+                    properties:
+                      size: { type: string }
+                      image: { type: string }
+          status:
+            type: object
+            properties:
+              atProvider:
+                type: object
+                description: "Fields written by external controllers"
+                properties:
+                  ipAddress:
+                    type: string
+                    description: "Assigned static IP from InfoBlox"
+                  hostname:
+                    type: string
+                    description: "Fully qualified hostname"
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type: { type: string }
+                    status: { type: string }
+                    reason: { type: string }
+                    message: { type: string }</code></code></pre>
+
+<h3 id="infoblox-composition">Composition</h3>
+
+<p>The Composition reads the IP from XR status (after the external controller assigns it) and patches it into the VM spec. Using Go-Templating for full status access:</p>
+
+<pre><code>apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: vm-kubevirt-with-ip
+  labels:
+    crossplane.io/xrd: xvirtualmachines.infra.example.com
+    infra.example.com/kubevirt: "true"
+    infra.example.com/ipam: infoblox
+spec:
+  mode: Pipeline
+  pipeline:
+  - step: build-vm-spec
+    functionRef:
+      name: crossplane-function-go-templating
+    inputs:
+      apiVersion: gotemplating.crt.sh/v1alpha1
+      kind: GoTemplate
+      spec:
+        template:
+          apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+          metadata:
+            name: {{ .XR.metadata.name }}-vm
+            namespace: openshift-virtualization
+            labels:
+              infra.example.com/managed-by: crossplane
+          spec:
+            running: true
+            template:
+              spec:
+                domain:
+                  cpu:
+                    cores: {{ .XR.spec.parameters.compute.vcpus }}
+                  resources:
+                    requests:
+                      memory: {{ .XR.spec.parameters.compute.memory }}
+                networks:
+                - pod: {}
+                # IP is patched from XR status by the external controller
+                # The VM uses the assigned IP via hostNetwork or OVN-Kubernetes static IP
+                terminationGracePeriodSeconds: 30
+                volumes:
+                - name: rootdisk
+                  dataVolume:
+                    name: {{ .XR.metadata.name }}-dv
+  - step: build-dv-spec
+    functionRef:
+      name: crossplane-function-patch-and-transform
+    inputs:
+    - ref:
+        name: {{ .XR.metadata.name }}-dv
+        kind: DataVolume
+      policy:
+        optional: false
+    functionConfigRef:
+      name: vm-dv-patch-config</code></code></pre>
+
+<div class="callout">
+  <div class="callout-label">Timing note</div>
+  The external controller waits for <code>Ready</code> status on the XR before assigning an IP. This ensures the VM is provisioned first. The Composition then reads the IP from <code>status.atProvider</code> and configures the VM's network. This ordering is critical — you don't want to reserve an IP before the VM exists.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="patterns">5. Common Patterns</h2>
+<!-- ============================================================ -->
+
+<h3 id="idempotency">Idempotency</h3>
+
+<p>Every reconcile call must be idempotent. The K8s controller-runtime library may call <code>Reconcile</code> multiple times for the same resource due to:</p>
+
+<ul>
+  <li>Event storms (many events arriving at once)</li>
+  <li>Controller restarts</li>
+  <li>Cache inconsistencies during upgrades</li>
+  <li>Manual <code>kubectl annotate --force</code> triggers</li>
+</ul>
+
+<p>Idempotency pattern — always check current state before acting:</p>
+
+<pre><code>func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+    xr := &infrav1.XRVirtualMachine{}
+    r.Get(ctx, req.NamespacedName, xr)
+
+    // Already done? Skip.
+    if xr.Status.AtProvider.IPAddress != "" {
+        return ctrl.Result{}, nil
+    }
+
+    // Check if InfoBlox already has this hostname
+    existingIP, err := r.infoBlox.LookupByHostname(xr.Name)
+    if err == nil && existingIP != "" {
+        // IP already exists — just update status, don't allocate new
+        xr.Status.AtProvider.IPAddress = existingIP
+        r.Status().Update(ctx, xr)
+        return ctrl.Result{}, nil
+    }
+
+    // Neither status nor InfoBlox has it — allocate
+    resp, err := r.infoBlox.AllocateIP(...)
+    // ...
+}</code></code></pre>
+
+<h3 id="error-handling">Error handling and backoff</h3>
+
+<p>Don't return errors that cause infinite requeue loops. Use <code>ctrl.Result{RequeueAfter: duration}</code> for transient errors and status conditions for permanent ones:</p>
+
+<pre><code>func (r *Reconciler) handleAPIError(err error, xr *infrav1.XRVirtualMachine) (ctrl.Result, error) {
+    // Transient errors (network timeout, rate limit)
+    if isTransient(err) {
+        meta.SetStatusCondition(&xr.Status.Conditions, metav1.Condition{
+            Type: "IPAddressAssigned", Status: metav1.ConditionFalse,
+            Reason: "TransientError",
+            Message: err.Error(),
+        })
+        r.Status().Update(context.TODO(), xr)
+        return ctrl.Result{RequeueAfter: exponentialBackoff()}, nil
+    }
+
+    // Permanent errors (invalid config, not found)
+    meta.SetStatusCondition(&xr.Status.Conditions, metav1.Condition{
+        Type: "IPAddressAssigned", Status: metav1.ConditionFalse,
+        Reason: "PermanentError",
+        Message: err.Error(),
+    })
+    r.Status().Update(context.TODO(), xr)
+    // Don't requeue — this won't self-heal
+    return ctrl.Result{}, nil
+}</code></code></pre>
+
+<h3 id="secrets">Secret management</h3>
+
+<p>Never hardcode API credentials. Use Kubernetes Secrets or external secret managers:</p>
+
+<pre><code>func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+    // Read credentials from a K8s Secret at startup
+    secret := &corev1.Secret{}
+    if err := mgr.GetClient().Get(context.TODO(),
+        types.NamespacedName{Namespace: "crossplane-system", Name: "infoblox-creds"}, secret); err != nil {
+        return fmt.Errorf("read infoblox secret: %w", err)
+    }
+
+    r.infoBlox = &infoblox.Client{
+        BaseURL:    "https://infoblox.example.com",
+        Username:   string(secret.Data["username"]),
+        Password:   string(secret.Data["password"]),
+        HTTPClient: &http.Client{Timeout: 30 * time.Second},
+    }
+
+    return ctrl.NewControllerManagedBy(mgr).
+        For(&infrav1.XRVirtualMachine{}).
+        Watches(
+            &source.Kind{Type: &corev1.Secret{}},
+            handler.EnqueueRequestsFromMapFunc(r.requeueOnSecretChange),
+        ).
+        Complete(r)
+}</code></code></pre>
+
+<div class="danger">
+  <div class="danger-title">Security note</div>
+  Use <code>cert-manager</code> with External Secrets Operator for production. Hardcoding credentials in Secrets is acceptable for development but not for production. The External Secrets Operator pulls from Vault, AWS Secrets Manager, or Azure Key Vault and syncs to K8s Secrets with automatic rotation.
+</div>
+
+<h3 id="health-checks">Health checks</h3>
+
+<p>External controllers should expose health endpoints for monitoring:</p>
+
+<pre><code>func (r *Reconciler) SetupHealthChecks(mgr ctrl.Manager) error {
+    mgr.GetHealthzCheckFactory().Register("infoblox-connection", func(req *http.Request) error {
+        _, err := r.infoBlox.Ping()
+        if err != nil {
+            return fmt.Errorf("infoblox unreachable: %w", err)
+        }
+        return nil
+    })
+    return nil
+}</code></code></pre>
+
+<p>Monitor these metrics in Prometheus:</p>
+
+<ul>
+  <li><code>reconcile_total</code> — count of reconcile attempts by result</li>
+  <li><code>reconcile_duration_seconds</code> — histogram of reconcile times</li>
+  <li><code>infoblox_api_errors_total</code> — count of API errors by type</li>
+  <li><code>ip_allocation_latency_seconds</code> — time from XR creation to IP assignment</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="exercise">6. Exercise</h2>
+<!-- ============================================================ -->
+
+<div class="exercise">
+  <div class="exercise-title">Exercise: Trace the InfoBlox controller</div>
+  <p>Given the reconciler code above, trace what happens when:</p>
+  <ol>
+    <li>A user creates an <code>XRVirtualMachine</code> with <code>spec.networkView: "Default"</code> and <code>spec.network: "10.20.30.0/24"</code></li>
+    <li>The Composition runs and creates the VM, but the VM is still starting up</li>
+    <li>The VM becomes <code>Ready</code></li>
+    <li>The InfoBlox controller assigns IP <code>10.20.30.45</code></li>
+    <li>The user deletes the XR</li>
+  </ol>
+  <p>For each step, answer: What does the controller do? What gets written to XR status? What does the Composition see?</p>
+</div>
+
+<button class="answer-toggle" onclick="toggleAnswer('answers-001')">Show Answers ▾</button>
+<div id="answers-001" class="answer-panel" style="display:none;">
+
+<h2>Exercise — Answer Key</h2>
+
+<h3>Step 1: XR created</h3>
+<p>The claim controller creates the XR. The Composition controller runs the Composition, creating the KubeVirt VM. The InfoBlox controller watches the XR but sees no IP and the XR is not yet Ready — it requeues with a 10s delay.</p>
+
+<h3>Step 2: VM starting</h3>
+<p>The controller keeps requeuing every 10 seconds. Each time it checks: no IP in status, XR not Ready → requeue. No API calls to InfoBlox yet. This is correct — don't reserve an IP for a VM that doesn't exist.</p>
+
+<h3>Step 3: VM Ready</h3>
+<p>The controller sees <code>Ready</code> condition is true. Calls InfoBlox nominate → allocate. Writes IP <code>10.20.30.45</code> to <code>status.atProvider.ipAddress</code>. Sets <code>IPAddressAssigned=True</code> condition. The Composition's Go-Templating function can now read <code>.XR.status.atProvider.ipAddress</code> and patch it into the VM's network configuration.</p>
+
+<h3>Step 4: IP assigned</h3>
+<p>On the next reconcile, the controller sees <code>status.atProvider.ipAddress != ""</code> and returns immediately. No further API calls. The VM now has its static IP configured.</p>
+
+<h3>Step 5: XR deleted</h3>
+<p>The controller sees the deletion timestamp is set. It should call <code>r.infoBlox.ReleaseIP(recordRef)</code> to free the IP in InfoBlox, then remove the finalizer. The IP becomes available for allocation to another VM.</p>
+
+</div>
+
+<!-- ============================================================ -->
+<h2 id="summary">Summary</h2>
+<!-- ============================================================ -->
+
+<p>External controllers extend Crossplane beyond what providers can handle. They follow the same reconcile loop pattern as any Kubernetes controller but operate on Crossplane resources as their trigger.</p>
+
+<p>The three patterns — status enrichment, resource creation, and secret enrichment — cover most use cases. Status enrichment is the simplest and most common: the controller reads an XR, calls an external API, and writes results back to <code>status.atProvider</code>. The Composition then reads those results and patches them into child resources.</p>
+
+<p>The InfoBlox example demonstrates the full stack: Go types for the WAPI, an HTTP client with basic auth, a reconciler that watches XRs and handles the full lifecycle (allocate, update, release), and a Composition that consumes the assigned IP. The key design decisions are idempotency (check before acting), timing (wait for VM ready before allocating IP), and error handling (transient vs permanent).</p>
+
+<p>External controllers are deployed as separate deployments in the cluster, managed by ArgoCD alongside Crossplane components. They need RBAC permissions to read XRs and write to their status. They scale independently of Crossplane's built-in controllers.</p>
+
+<script>
+function toggleAnswer(id) {
+    var panel = document.getElementById(id);
+    var btn = panel.previousElementSibling;
+    if (panel.style.display === "none") {
+        panel.style.display = "block";
+        btn.textContent = "Hide Answers ▴";
+    } else {
+        panel.style.display = "none";
+        btn.textContent = "Show Answers ▾";
+    }
+}
+</script>
+
+</body>
+</html>

@@ -61,6 +61,7 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-013-storage-for-vms-datavolumes-pvc-lifecycle-and-storage-classes.html  # Storage for VMs — DataVolumes, PVC lifecycle, storage classes
     ├── explainer-014-xrd-composition-lifecycle.html           # XRD & Composition lifecycle — step-by-step walkthrough
     ├── explainer-015-enrichment-pattern.html              # Enrichment pattern — external controllers for XRs
+    ├── explainer-016-external-controllers.html              # External controllers deep dive: K8s controllers, Crossplane controllers, InfoBlox IPAM
 ```
 
 ## Explainers
@@ -326,6 +327,23 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 **Key concepts:** external controllers, crossplane.io/composite label, status enrichment, resource enrichment, connection secret enrichment, sync-wave ordering, RBAC for enrichment
 
 **Exercise:** Build a monitoring enrichment controller that creates Prometheus ServiceMonitors for Crossplane-managed VMs
+
+---
+
+### Explainer 16: [External Controllers — Deep Dive for Crossplane](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-016-external-controllers.html)
+
+**What it covers:**
+- Kubernetes controller fundamentals: controller-runtime, reconcile loop, watch pattern
+- Crossplane's four built-in controllers (Composite, Claim, Composition, Provider) and how they relate to external controllers
+- Three external controller patterns: status enrichment, resource creation, secret enrichment — with comparison table
+- Full InfoBlox IPAM example: WAPI types, HTTP client, reconcile loop, XRD schema, Composition integration
+- Production patterns: idempotency, error handling with backoff, secret management, health checks
+- Exercise: trace the full lifecycle from XR creation through IP allocation to release
+
+**Key concepts:** reconcile loop, controller-runtime, status enrichment, InfoBlox WAPI, nominate function, idempotency, finalizers, exponential backoff
+
+**Exercise:** Trace the InfoBlox controller lifecycle from XR creation through IP allocation to release
+
 
 ## Glossary
 The canonical terminology is captured in [`GLOSSARY.md`](GLOSSARY.md). Key terms include:
