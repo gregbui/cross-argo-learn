@@ -297,6 +297,7 @@
     <li><a href="#concrete-examples">Concrete Examples</a></li>
     <li><a href="#argocd-integration">ArgoCD Integration</a></li>
     <li><a href="#troubleshooting">Troubleshooting</a></li>
+    <li><a href="#ipam-enrichment">IPAM: Static IP Address Enrichment</a></li>
     <li><a href="#exercise">Exercise</a></li>
   </ul>
 </div>
@@ -1045,6 +1046,126 @@ spec:
 # xr.Status.NetworkPolicy.EgressRules = 1</code></code></pre>
 
 <!-- ============================================================ -->
+<h3>Example 6: IPAM — Static IP Address Enrichment</h3>
+
+<p>When a VM needs a static IP address managed by an external IPAM (IP Address Management) system — such as a dedicated IPAM service, a network controller, or cross-cluster address coordination — the enrichment pattern provides the bridge between Crossplane's VM provisioning and the IPAM's address assignment.</p>
+
+<h4>How it works</h4>
+
+<p>The enrichment controller watches for Crossplane-managed VirtualMachines that need an IP, requests a static address from the IPAM service, updates the VM spec with the assigned IP, and writes the result back to the XR status.</p>
+
+<pre><code># Controller creates this CR to track the IP allocation:
+apiVersion: ipam.infra.example.com/v1
+kind: IPAddress
+metadata:
+  name: vm-01-ip
+  labels:
+    crossplane.io/composite: xrvirtualmachine/webserver-01
+spec:
+  xrRef:
+    apiVersion: infra.example.com/v1alpha1
+    kind: XRVirtualMachine
+    name: webserver-01
+  network: default
+  requestedIP: ""  # assigned by IPAM controller
+status:
+  assignedIP: "10.0.1.42"
+  gateway: "10.0.1.1"
+  dnsName: "vm-01.infra.local"
+  allocationStatus: allocated
+
+# Controller patches the VirtualMachine spec with the IP:
+# spec.template.spec.networks[0].multus:
+#   networkName: default
+# spec.template.spec.networks[0].podNetwork.v4IPNet: "10.0.1.42/24"
+
+# Controller writes to XR status:
+# xr.Status.EnrichedIP = "10.0.1.42"
+# xr.Status.EnrichedGateway = "10.0.1.1"
+# xr.Status.EnrichedDNS = "vm-01.infra.local"</code></code></pre>
+
+<h4>Controller reconciliation (simplified)</h4>
+
+<pre><code>func (r *IPAMReconciler) Reconcile(ctx context.Context, req controller.Request) (controller.Result, error) {
+    vm := &kubevirtv1.VirtualMachine{}
+    r.Get(ctx, req.NamespacedName, vm)
+
+    xrName, found := vm.Labels["crossplane.io/composite"]
+    if !found { return controller.Result{}, nil }
+
+    xr := &infrav1.XRVirtualMachine{}
+    r.Get(ctx, types.NamespacedName{Name: xrName}, xr)
+
+    // Check if XR has requested an IP
+    if xr.Spec.NeedsIP != true {
+        return controller.Result{}, nil
+    }
+
+    // Check if IP is already assigned
+    if xr.Status.EnrichedIP != "" {
+        return controller.Result{}, nil
+    }
+
+    // Request static IP from IPAM service
+    ip, gateway, err := r.ipamClient.RequestStaticIP(ctx, &ipam.Request{
+        Network:  xr.Spec.Network.NetworkName,
+        Hostname: xr.Name,
+        Tags:     map[string]string{"crossplane": "true"},
+    })
+    if err != nil {
+        return controller.Result{RequeueAfter: 30 * time.Second}, err
+    }
+
+    // Patch the VirtualMachine spec with the assigned IP
+    vm.Spec.Template.Spec.Networks = append(vm.Spec.Template.Spec.Networks,
+        kubevirtv1.PodNetwork{
+            PodNetwork: kubevirtv1.PodNetworkAnnotations{
+                Name: xr.Spec.Network.NetworkName,
+                PodNetworkV4IPNet: ip.String() + "/24",
+            },
+        },
+    )
+    r.Update(ctx, vm)
+
+    // Write enriched data to XR status
+    xr.Status.EnrichedIP = ip.String()
+    xr.Status.EnrichedGateway = gateway.String()
+    xr.Status.EnrichedDNS = fmt.Sprintf("%s.%s", xr.Name, r.DNSZone)
+    r.Status().Update(ctx, xr)
+
+    return controller.Result{}, nil
+}</code></code></pre>
+
+<h4>When to use IPAM enrichment</h4>
+
+<table>
+  <tr>
+    <th>Use enrichment</th>
+    <th>Use Composition directly</th>
+  </tr>
+  <tr>
+    <td>IP managed by external IPAM service</td>
+    <td>IP from a predefined pool in the XRD spec</td>
+  </tr>
+  <tr>
+    <td>IPs coordinated across multiple clusters</td>
+    <td>IPs local to a single cluster</td>
+  </tr>
+  <tr>
+    <td>IP lifecycle includes reservation, release, reclaim</td>
+    <td>IP lifecycle tied to VM lifecycle only</td>
+  </tr>
+  <tr>
+    <td>IP must be assigned after VM is created (dynamic)</td>
+    <td>IP known before VM creation</td>
+  </tr>
+</table>
+
+<div class="note">
+  <div class="note-title">IPAM enrichment as a hybrid pattern</div>
+  <p>IPAM enrichment often combines <strong>resource enrichment</strong> (the IPAddress CR tracks the allocation) with <strong>status enrichment</strong> (the IP is written to XR.status for the Claim consumer) and <strong>spec patching</strong> (the controller updates the VM spec with the assigned IP). This is a common pattern where enrichment reaches back into the managed resource's spec, not just the XR's status.</p>
+</div>
+
 <h2 id="argocd-integration">ArgoCD Integration</h2>
 
 <p>External enrichment controllers should be deployed via ArgoCD alongside the Crossplane infrastructure. This keeps the entire stack GitOps-managed.</p>
@@ -1326,7 +1447,7 @@ spec:
   <li><strong>RBAC</strong> — External controllers need explicit permissions to read XRs and write to their status</li>
 </ul>
 
-<p>Enrichment turns a bare VM into a production-ready workload: it gets DNS, monitoring, security scanning, certificates, and network policies — all managed by specialized external controllers that observe the XR and act independently.</p>
+<p>Enrichment turns a bare VM into a production-ready workload: it gets DNS, monitoring, security scanning, certificates, network policies, and static IP addresses from IPAM — all managed by specialized external controllers that observe the XR and act independently.</p>
 
 </body>
 </html>
