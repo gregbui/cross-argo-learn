@@ -1047,7 +1047,7 @@ spec:
 # xr.Status.NetworkPolicy.EgressRules = 1</code></code></pre>
 
 <!-- ============================================================ -->
-<h3>Example 6: IPAM — Static IP Address Enrichment</h3>
+<h3 id="ipam-enrichment">Example 6: IPAM — Static IP Address Enrichment</h3>
 
 <p>When a VM needs a static IP address managed by an external IPAM (IP Address Management) system — such as a dedicated IPAM service, a network controller, or cross-cluster address coordination — the enrichment pattern provides the bridge between Crossplane's VM provisioning and the IPAM's address assignment.</p>
 
@@ -1167,7 +1167,7 @@ status:
   <p>IPAM enrichment often combines <strong>resource enrichment</strong> (the IPAddress CR tracks the allocation) with <strong>status enrichment</strong> (the IP is written to XR.status for the Claim consumer) and <strong>spec patching</strong> (the controller updates the VM spec with the assigned IP). This is a common pattern where enrichment reaches back into the managed resource's spec, not just the XR's status.</p>
 </div>
 
-<h3>Example 7: Naming Service — Unique VM Name Enrichment</h3>
+<h3 id="naming-enrichment">Example 7: Naming Service — Unique VM Name Enrichment</h3>
 
 <p>When a VM claim is submitted without a specific name (or with a human-readable intent name like <code>webserver</code>), an external naming service assigns a unique, convention-compliant name for the actual VirtualMachine resource. The enrichment controller bridges the claim's intent name with the naming service's unique assignment.</p>
 
