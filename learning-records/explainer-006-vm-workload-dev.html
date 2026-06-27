@@ -277,7 +277,7 @@
 
 <h3>Cloud-Init Support</h3>
 
-<p><strong>cloud-init</strong> is the standard tool for configuring VMs on first boot. It runs when the VM starts for the first time and configures:</p>
+<p><strong>cloud-init</strong> is the standard tool for configuring VMs on first boot. It runs when the VM starts for the first time and configures: hostname, SSH keys, users, network, packages, and scripts. For Kubernetes-native configuration patterns (ConfigMaps, init containers, composition functions), see <a href="explainer-009-cloud-init-and-guest-agent.html">Explainer 009</a>.</p>
 
 <ul>
   <li>Hostname, SSH keys, users</li>
@@ -420,7 +420,7 @@ systemctl enable --now qemu-guest-agent</code></pre>
 <h2>4. Cloud-Init in a Crossplane Composition</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>Cloud-init configuration is passed to the VM via a <strong>cloud-init user-data drive</strong>. In a Crossplane Composition, this is typically handled by the Go-Templating function:</p>
+<p>Cloud-init configuration is passed to the VM via a <strong>cloud-init user-data drive</strong>. In a Crossplane Composition, this is typically handled by the Go-Templating function. For Kubernetes-native alternatives (ConfigMaps, init containers, connection secrets, readiness probes), see <a href="explainer-009-cloud-init-and-guest-agent.html">Explainer 009</a>.</p>
 
 <pre><code># In the Composition's Go-Templating step, inject cloud-init user-data:
 apiVersion: v1
