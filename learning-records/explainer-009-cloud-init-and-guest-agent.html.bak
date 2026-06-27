@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud-init & Guest Agent for VM Workloads</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b94e;
+    --accent: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.4rem;
+    color: #f0f6fc;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  ul, ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+  li { margin-bottom: 0.5rem; }
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .callout-label {
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+  .callout.warning { border-left-color: var(--accent-orange); }
+  .callout.warning .callout-label { color: var(--accent-orange); }
+  .callout.danger { border-left-color: var(--accent-red); }
+  .callout.danger .callout-label { color: var(--accent-red); }
+  .callout.success { border-left-color: var(--accent-green); }
+  .callout.success .callout-label { color: var(--accent-green); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface);
+    color: #f0f6fc;
+    font-weight: 600;
+  }
+  td { background: var(--bg); }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .toc h2 {
+    font-size: 1.1rem;
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    border: none;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc li { margin-bottom: 0.25rem; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ -->
+<h1>Cloud-init &amp; Guest Agent for VM Workloads</h1>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Two pieces make VMs actually useful: cloud-init (provisioning at first boot) and the guest agent (runtime visibility and management). In a Crossplane + KubeVirt stack, these need careful configuration — especially on OpenShift where the SDN, RBAC, and networking differ from public clouds.</p>
+
+<div class="toc">
+  <h2>Contents</h2>
+  <ul>
+    <li><a href="#cloud-init-basics">1. Cloud-init: First-Boot Provisioning</a></li>
+    <li><a href="#cloud-init-structure">2. Cloud-init Document Structure</a></li>
+    <li><a href="#cloud-init-openshift">3. Cloud-init on OpenShift</a></li>
+    <li><a href="#guest-agent">4. Guest Agent: Runtime Visibility</a></li>
+    <li><a href="#guest-agent-status">5. Guest Agent Status in Crossplane</a></li>
+    <li><a href="#cloud-init-composition">6. Injecting Cloud-init via Composition</a></li>
+    <li><a href="#windows">7. Windows Guest Support</a></li>
+    <li><a href="#troubleshooting">8. Troubleshooting</a></li>
+    <li><a href="#whats-next">9. What's Next</a></li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="cloud-init-basics">1. Cloud-init: First-Boot Provisioning</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Cloud-init is the de facto standard for VM initialization. It runs once at first boot (or every boot with <code>runcmd</code> scripts) and configures:</p>
+
+<ul>
+  <li><strong>Networking</strong> — static IPs, DNS, routes, bond interfaces</li>
+  <li><strong>Users &amp; auth</strong> — SSH keys, passwords, sudo access</li>
+  <li><strong>Packages</strong> — install software, apply patches</li>
+  <li><strong>Services</strong> — start/enable daemons</li>
+  <li><strong>Files</strong> — drop config files, certificates, scripts</li>
+  <li><strong>Hostname</strong> — set the system hostname</li>
+</ul>
+
+<p>In KubeVirt, cloud-init data is injected via the <code>guestInfo</code> or <code>cloudInitNoCloud</code> properties on the VirtualMachine spec. Crossplane compositions generate these from XR spec fields.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="cloud-init-structure">2. Cloud-init Document Structure</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Cloud-init supports YAML or MIME multi-part documents. YAML is simpler and more common for straightforward use cases:</p>
+
+<pre><code># Basic cloud-init document
+#cloud-config
+
+hostname: web-server-01
+fqdn: web-server-01.example.org
+
+users:
+  - name: cloud-user
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh-authorized-keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host
+
+ssh_pwauth: false
+
+packages:
+  - htop
+  - tmux
+  - jq
+
+runcmd:
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+  - echo "VM provisioned at $(date)" > /etc/VM_PROVISIONED
+  - curl -s http://metadata.internal/ready > /dev/null
+
+final_message: "Cloud-init finished. VM is ready."
+write_files:
+  - path: /etc/network-config
+    content: |
+      network:
+        version: 2
+        ethernets:
+          eth0:
+            dhcp4: false
+            addresses:
+              - {{ .XR.spec.network.staticIP }}/24
+            gateway4: {{ .XR.spec.network.gateway }}
+            nameservers:
+              addresses:
+                - 10.0.0.10
+                - 10.0.0.11
+
+manage_etc_hosts: true</code></pre>
+
+<p>MIME multi-part documents let you mix cloud-init with custom scripts — useful when you need shell scripts that run before cloud-init:</p>
+
+<pre><code>MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="==MYBOUNDARY=="
+
+--==MYBOUNDARY==
+Content-Type: text/cloud-config; charset="us-ascii"
+
+#cloud-config
+hostname: web-server-01
+users:
+  - name: cloud-user
+    ssh-authorized-keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host
+
+--==MYBOUNDARY==
+Content-Type: text/x-shellscript; charset="us-ascii"
+
+#!/bin/bash
+# Pre-cloud-init setup
+echo "Configuring custom NTP..."
+timedatectl set-timezone America/Chicago
+
+--==MYBOUNDARY==
+Content-Type: text/x-shellscript; charset="us-ascii"
+
+#!/bin/bash
+# Post-cloud-init
+echo "VM ready at $(date)"
+curl -s http://monitoring.internal/register -d '{"name":"{{ .XR.metadata.name }}","env":"{{ .XR.metadata.namespace }}"}'
+
+--==MYBOUNDARY==--</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="cloud-init-openshift">3. Cloud-init on OpenShift</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>OpenShift adds complexity to cloud-init. The OpenShift SDN (OVN-Kubernetes) handles networking differently than a flat network, and the default user is <code>cloud-user</code> (not <code>ec2-user</code> like AWS).</p>
+
+<h3>3.1 Networking on OpenShift</h3>
+
+<p>VMs on OpenShift typically use the <strong>multus CNI</strong> for secondary network interfaces. The primary interface connects to the OpenShift SDN; secondary interfaces connect to workload networks:</p>
+
+<div class="diagram">┌─────────────────────────────────────────────────┐
+│              VirtualMachine                     │
+│                                                 │
+│  ┌───────────────────────────────────────────┐  │
+│  │  Primary NIC (OVN-Kubernetes)             │  │
+│  │  - DHCP from OpenShift SDN                │  │
+│  │  - Pod network namespace                  │  │
+│  │  - IP from OpenShift IP pool              │  │
+│  └───────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────┐  │
+│  │  Secondary NIC (Multus)                   │  │
+│  │  - Connected to workload network          │  │
+│  │  - Static IP from cloud-init              │  │
+│  │  - Isolated from OpenShift SDN            │  │
+│  └───────────────────────────────────────────┘  │
+│                                                 │
+│  Multus NetworkAttachmentDefinition:            │
+│  - workload-net (L2 isolated)                   │
+│  - management-net (management VLAN)             │
+└─────────────────────────────────────────────────┘</div>
+
+<p>Configure secondary networks via NetworkAttachmentDefinition CRs:</p>
+
+<pre><code># networks/workload-network.yaml
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: workload-net
+  namespace: workloads-dev
+spec:
+  config: '{
+    "cniVersion": "0.3.1",
+    "type": "macvlan",
+    "master": "ens4f0",
+    "mode": "bridge",
+    "ipam": {
+      "type": "static",
+      "ranges": [[{"subnet": "10.100.0.0/24"}]],
+      "routes": [{"dst": "10.100.0.0/16", "gateway": "10.100.0.1"}]
+    }
+  }'</code></pre>
+
+<p>Reference the network in your VirtualMachine composition:</p>
+
+<pre><code># composition: inject multus network into VM spec
+- name: virtualmachine
+  patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.network.workloadNetwork
+      toFieldPath: spec.template.spec.networks
+      patchesStringData: |
+        - name: workload-net
+          multus:
+            networkName: workloads-dev/workload-net
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.network.interfaces
+      toFieldPath: spec.template.spec.domain.devices.interfaces</code></pre>
+
+<h3>3.2 OpenShift-Specific cloud-init</h3>
+
+<p>On OpenShift, cloud-init needs to handle the fact that the VM is actually a pod. Key differences:</p>
+
+<ul>
+  <li><strong>No direct SSH to VM IP</strong> — the VM IP is a pod IP, accessible only within the cluster. Use <code>oc rsh</code> or set up SSH port-forwarding.</li>
+  <li><strong>Root access requires special handling</strong> — OpenShift runs containers as non-root by default. The guest agent runs as root inside the VM, but the pod's init container handles the setup.</li>
+  <li><strong>Firewall</strong> — OpenShift's firewalld is managed by the cluster. Don't try to configure it via cloud-init.</li>
+</ul>
+
+<pre><code>#cloud-config
+# OpenShift-specific cloud-init
+
+# OpenShift uses cloud-user by default
+users:
+  - name: cloud-user
+    groups: wheel
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    shell: /bin/bash
+    ssh-authorized-keys:
+      - {{ .XR.spec.guest.sshKey | default "" }}
+
+# Disable cloud-init's network configuration — OpenShift handles it
+network:
+  version: 1
+  config: disabled
+
+# Use runcmd for OpenShift-specific setup
+runcmd:
+  # Disable unnecessary services that conflict with OpenShift
+  - systemctl disable firewalld 2>/dev/null || true
+  - systemctl stop firewalld 2>/dev/null || true
+
+  # Enable guest agent
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+
+  # Set hostname (OpenShift respects this for VM identification)
+  - hostnamectl set-hostname {{ .XR.spec.guest.hostname }}
+
+  # Register with internal monitoring
+  - |
+    curl -s -X POST http://monitoring.internal/register \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "{{ .XR.metadata.name }}",
+        "namespace": "{{ .XR.metadata.namespace }}",
+        "image": "{{ .XR.spec.imageTemplate }}",
+        "env": "{{ .XR.metadata.namespace }}"
+      }'
+
+  # Create a ready marker file for ArgoCD health checks
+  - echo "ready" > /etc/VM_READY
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/openshift.conf
+    content: |
+      PermitRootLogin prohibit-password
+      PasswordAuthentication no
+      PubkeyAuthentication yes
+      AuthorizedKeysFile .ssh/authorized_keys
+
+  - path: /usr/local/bin/vm-status
+    content: |
+      #!/bin/bash
+      # Simple VM status reporter
+      echo "VM: {{ .XR.metadata.name }}"
+      echo "Env: {{ .XR.metadata.namespace }}"
+      echo "Image: {{ .XR.spec.imageTemplate }}"
+      echo "Started: $(uptime)"
+      echo "Guest agent: $(systemctl is-active qemu-guest-agent)"
+    permissions: '0755'</code></pre>
+
+<div class="callout warning">
+  <div class="callout-label">Warning: cloud-init networking conflicts</div>
+  If you configure <code>network.config</code> in cloud-init on OpenShift, it can conflict with the OVN-Kubernetes SDN and break VM networking. Always set <code>network: { version: 1, config: disabled }</code> and let OpenShift handle primary networking. Use multus for secondary interfaces only.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="guest-agent">4. Guest Agent: Runtime Visibility</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The QEMU guest agent runs inside the VM and provides the hypervisor with runtime information. Without it, KubeVirt sees VMs as black boxes — no filesystem access, no graceful shutdown, no metrics.</p>
+
+<h3>4.1 What the Guest Agent Provides</h3>
+
+<table>
+  <tr>
+    <th>Capability</th>
+    <th>Without Agent</th>
+    <th>With Agent</th>
+  </tr>
+  <tr>
+    <td>Guest OS name/version</td>
+    <td>Unknown</td>
+    <td>Reported to KubeVirt</td>
+  </tr>
+  <tr>
+    <td>IP addresses</td>
+    <td>Only MAC address</td>
+    <td>All guest IPs reported</td>
+  </tr>
+  <tr>
+    <td>Filesystem access</td>
+    <td>None</td>
+    <td><code>virt-copy-in/out</code>, file operations</td>
+  </tr>
+  <tr>
+    <td>Graceful shutdown</td>
+    <td>Force power-off only</td>
+    <td>ACPI shutdown signal sent</td>
+  </tr>
+  <tr>
+    <td>Live migration</td>
+    <td>Blocked</td>
+    <td>Enabled, with freeze/unfreeze</td>
+  </tr>
+  <tr>
+    <td>Disk freeze/thaw</td>
+    <td>Not possible</td>
+    <td>For consistent snapshots</td>
+  </tr>
+  <tr>
+    <td>Run commands inside VM</td>
+    <td>Not possible</td>
+    <td><code>guest-exec</code> support</td>
+  </tr>
+  <tr>
+    <td>Memory usage</td>
+    <td>Only host-side metrics</td>
+    <td>Guest-reported memory stats</td>
+  </tr>
+</table>
+
+<h3>4.2 Installing and Configuring the Guest Agent</h3>
+
+<p>Include guest agent installation in your base image build (see explainer 008):</p>
+
+<pre><code># In Packer provisioner or cloud-init runcmd
+sudo dnf install -y qemu-guest-agent
+sudo systemctl enable qemu-guest-agent
+sudo systemctl start qemu-guest-agent
+
+# Verify it's running
+sudo systemctl status qemu-guest-agent
+sudo qemu-ga --version</code></pre>
+
+<p>In the VirtualMachine spec, enable the guest agent device:</p>
+
+<pre><code># composition: add guest agent to VM spec
+- name: virtualmachine
+  patches:
+    - type: Inline
+      patches: |
+        spec:
+          template:
+            spec:
+              domain:
+                devices:
+                  autoattachPodDevice: true
+                  autoattachSerialConsole: true
+                  # Enable guest agent
+                  serials:
+                    - name: guestagent
+                      devicePath: /dev/virtio-ports/org.qemu.guest_agent.0
+                  interfaces:
+                    - name: default
+                      masquerade: {}
+                  disks:
+                    - name: rootdisk
+                      disk:
+                        bus: virtio
+                    - name: cloudinitdisk
+                      disk:
+                        bus: virtio
+              guest:
+                # Require guest agent for accurate status
+                agent: true
+              networks:
+                - name: default
+                  pod: {}</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="guest-agent-status">5. Guest Agent Status in Crossplane</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The guest agent's status flows through KubeVirt → Crossplane → your application. Understanding this flow is critical for monitoring and health checks.</p>
+
+<div class="diagram">
+┌──────────┐     ┌──────────────────┐     ┌─────────────────────┐
+│  VM      │────>│  KubeVirt        │────>│  Crossplane         │
+│  Guest   │     │  VMI Status      │     │  XR Status          │
+│  Agent   │     │                  │     │                     │
+│          │     │  guestInfo:      │     │  status.atProvider: │
+│  • OS    │     │    running: true │     │    ready: true      │
+│  • IPs   │     │    os:           │     │    guestInfo:       │
+│  • FS    │     │      name:       │     │    os: {...}        │
+│  • Cmds  │     │        ...       │     │    ips: [...]       │
+│          │     │                  │     │                     │
+└──────────┘     └──────────────────┘     └─────────────────────┘
+                          │
+                          ▼
+                ┌────────────────────┐
+                │  ArgoCD            │
+                │  Health Check      │
+                │                    │
+                │  Ready if:         │
+                │  • VM Running      │
+                │  • Agent.Connected │
+                │  • Guest has IPs   │
+                └────────────────────┘</div>
+
+<p>Query guest agent status from the command line:</p>
+
+<pre><code># Check if guest agent is connected
+oc get vmi &lt;vm-name&gt; -n workloads-dev -o jsonpath='{.status.guestOSInfo}'
+
+# Get guest IP addresses (more accurate than pod IPs)
+oc get vmi &lt;vm-name&gt; -n workloads-dev -o jsonpath='{.status.interfaces}'
+
+# Run a command inside the guest via the agent
+oc virt guest-exec &lt;vm-name&gt; -n workloads-dev -- ls -la /etc
+
+# Get guest filesystem contents
+oc virt-copy-out -d &lt;vm-name&gt; /etc/hostname .
+
+# Check agent version inside guest
+oc virt-guest-agent-command &lt;vm-name&gt; -n workloads-dev \
+  --query '{"execute":"guest-info"}'</code></pre>
+
+<p>In your composition, you can use the guest agent status in conditional logic:</p>
+
+<pre><code># composition: check guest agent status before proceeding
+- step: check-guest-agent
+  functionRef:
+    name: crossplane-function-go-templating
+  inputs:
+    - apiVersion: apps.crossplane.io/v1alpha1
+      kind: RuntimeConfig
+      resources:
+        - name: vm-status
+          base:
+            apiVersion: kubevirt.io/v1
+            kind: VirtualMachineInstance
+            metadata:
+              name: '{{ .XR.metadata.name }}'
+              namespace: '{{ .XR.metadata.namespace }}'
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: metadata.name
+              toFieldPath: metadata.name
+            - type: FromCompositeFieldPath
+              fromFieldPath: metadata.namespace
+              toFieldPath: metadata.namespace</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="cloud-init-composition">6. Injecting Cloud-init via Composition</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>The composition generates the cloud-init user-data and passes it to KubeVirt via the <code>cloudInitNoCloud</code> or <code>guestInfo</code> source. Here's the full composition pattern:</p>
+
+<pre><code># compositions/xvirtualmachine-pipeline.yaml
+- step: inject-cloudinit
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+    - apiVersion: pt.fn.crossplane.io/v1
+      kind: Resources
+      resources:
+        - name: cloudinit-dv
+          base:
+            apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataVolume
+            metadata:
+              name: '{{ .XR.metadata.name }}-cloudinit'
+              namespace: '{{ .XR.metadata.namespace }}'
+            spec:
+              pvc:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 1Mi
+                storageClassName: 'local-storage'
+              source:
+                cloudInit:
+                  noCloud:
+                    secretRef: '{{ .XR.metadata.name }}-cloudinit-secret'
+        - name: cloudinit-secret
+          base:
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: '{{ .XR.metadata.name }}-cloudinit-secret'
+              namespace: '{{ .XR.metadata.namespace }}'
+            type: kubernetes.io/opaque
+            stringData:
+              user-data: |
+                #cloud-config
+                hostname: {{ .XR.spec.guest.hostname | default .XR.metadata.name }}
+                fqdn: {{ .XR.spec.guest.hostname | default .XR.metadata.name }}.{{ .XR.metadata.namespace }}.svc.cluster.local
+
+                users:
+                  - name: cloud-user
+                    groups: wheel
+                    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+                    ssh-authorized-keys:
+                    {{- range .XR.spec.guest.linux.sshKeys }}
+                      - {{ . }}
+                    {{- end }}
+
+                packages:
+                  - htop
+                  - tmux
+                  - jq
+                  - qemu-guest-agent
+
+                runcmd:
+                  - systemctl enable qemu-guest-agent
+                  - systemctl start qemu-guest-agent
+                  - echo "VM {{ .XR.metadata.name }} provisioned at $(date)" > /etc/VM_PROVISIONED
+                  - echo "ready" > /etc/VM_READY
+
+                write_files:
+                  - path: /etc/ssh/sshd_config.d/openshift.conf
+                    content: |
+                      PermitRootLogin prohibit-password
+                      PasswordAuthentication no
+                      PubkeyAuthentication yes
+
+                final_message: "Cloud-init finished. VM {{ .XR.metadata.name }} is ready."</code></pre>
+
+<p>The composition creates two resources: a DataVolume that references a Secret containing the cloud-init user-data, and the Secret itself. KubeVirt reads the cloud-init data from the Secret and injects it into the VM at boot via a cloud-init disk.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="windows">7. Windows Guest Support</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Windows VMs use a different initialization mechanism: <strong>Guest Custom Data</strong> via the <code>guestInfo</code> cloud-init source, or <strong>unattend.xml</strong> for Windows-specific provisioning.</p>
+
+<h3>7.1 Windows Guest Custom Data (cloud-init for Windows)</h3>
+
+<p>KubeVirt supports cloud-init for Windows 2016+ via the <code>guestInfo</code> source. This uses a subset of cloud-init features:</p>
+
+<pre><code># composition: Windows cloud-init
+- name: cloudinit-secret
+  base:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: '{{ .XR.metadata.name }}-cloudinit-secret'
+      namespace: '{{ .XR.metadata.namespace }}'
+    type: kubernetes.io/opaque
+    stringData:
+      user-data: |
+        #cloud-config
+        hostname: win-server-01
+        users:
+          - name: Administrator
+            ssh-authorized-keys: []
+        password: '{{ .XR.spec.guest.windows.adminPassword }}'
+        chpasswd:
+          expire: false
+        runcmd:
+          - powershell -Command "Set-NetAdapter -Name 'Ethernet' | Set-NetIPInterface -Dhcp Enabled"
+          - powershell -Command "Install-WindowsFeature -Name Web-Server"
+        packages: []
+        final_message: "Windows VM {{ .XR.metadata.name }} is ready."</code></pre>
+
+<h3>7.2 Windows Guest Agent</h3>
+
+<p>Windows VMs need the <strong>QEMU Guest Agent for Windows</strong> installed. Include it in your Windows base image:</p>
+
+<pre><code># In Packer Windows provisioner
+provisioner "powershell" {
+  inline = [
+    # Download and install QEMU guest agent
+    'Invoke-WebRequest -Uri "https://download.qemu.org/qga/qemu-ga-win-*.msi" -OutFile "C:\qemu-ga.msi"',
+    'msiexec /i C:\qemu-ga.msi /quiet /norestart',
+    # Enable and start the service
+    'Start-Service qemu-ga',
+    'Set-Service qemu-ga -StartupType Automatic',
+  ]
+}</code></pre>
+
+<p>In the VirtualMachine spec, enable the Windows guest agent:</p>
+
+<pre><code># composition: Windows guest agent config
+- name: virtualmachine
+  patches:
+    - type: Inline
+      patches: |
+        spec:
+          template:
+            spec:
+              domain:
+                devices:
+                  autoattachPodDevice: true
+                  autoattachSerialConsole: false
+                  autoattachGraphicsDevice: false
+                  # Windows uses virtio-serial for guest agent
+                  serials:
+                    - name: guestagent
+                      devicePath: 'COM1'
+              guest:
+                agent: true</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Note</div>
+  Windows cloud-init support in KubeVirt is available from version 1.1+. Check your KubeVirt version before using guest custom data for Windows VMs.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="troubleshooting">8. Troubleshooting</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<h3>8.1 Cloud-init not running</h3>
+
+<pre><code># Check cloud-init status inside the VM
+oc rsh &lt;vm-debug-pod&gt;
+# Then into the guest:
+systemctl status cloud-init
+journalctl -u cloud-init
+
+# Common issue: cloud-init ran but failed
+cat /var/log/cloud-init.log
+cat /var/log/cloud-init-output.log
+
+# Check if cloud-init disk was attached
+oc get vmi &lt;vm-name&gt; -n workloads-dev -o yaml | grep -A5 cloudInit</code></pre>
+
+<h3>8.2 Guest agent not connecting</h3>
+
+<pre><code># Check VMI status for agent connection
+oc get vmi &lt;vm-name&gt; -n workloads-dev -o jsonpath='{.status.conditions[?(@.type=="AgentConnected")].status}'
+
+# Should return "True". If "False" or missing:
+# 1. Check guest agent is installed and running
+oc rsh &lt;vm-debug-pod&gt;
+systemctl status qemu-guest-agent
+
+# 2. Check virtio-serial device is present
+ls -la /dev/virtio-ports/
+
+# 3. Check KubeVirt logs for agent errors
+oc logs -n kubevirt $(oc get pods -n kubevirt -l kubevirt.io=virt-handler -o name) | grep agent</code></pre>
+
+<h3>8.3 Network conflicts</h3>
+
+<pre><code># If VM lost networking after cloud-init:
+# 1. Check if cloud-init modified network config
+cat /etc/sysconfig/network-scripts/ifcfg-eth0
+# or on newer systems:
+cat /etc/NetworkManager/system-connections/*.nmconnection
+
+# 2. Check OVN network status
+oc get network-attachment-definitions -n workloads-dev
+
+# 3. Verify multus is working
+oc get pods -n multus
+oc debug node/&lt;worker-node&gt;
+# chroot into the node and check CNI plugins
+ls /var/lib/cni/</code></pre>
+
+<h3>8.4 SSH not working</h3>
+
+<pre><code># Common causes:
+# 1. SSH key not injected — check cloud-init secret
+oc get secret &lt;vm-name&gt;-cloudinit-secret -n workloads-dev -o jsonpath='{.data.user-data}' | base64 -d
+
+# 2. SSH service not started
+oc rsh &lt;vm-debug-pod&gt;
+systemctl status sshd
+
+# 3. Firewall blocking (shouldn't happen on OpenShift, but check)
+oc rsh &lt;vm-debug-pod&gt;
+firewall-cmd --list-ports  # Should be empty on OpenShift
+
+# 4. Using pod IP to SSH (won't work from outside cluster)
+# Solution: use oc rsh or port-forward
+oc port-forward &lt;vm-name&gt; 2222:22 -n workloads-dev
+ssh -p 2222 cloud-user@localhost</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="whats-next">9. What's Next</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>With cloud-init and guest agent configured, your VMs are provisioned at boot and visible at runtime. The remaining topics for your stack:</p>
+
+<ul>
+  <li><strong>Multi-environment rollout</strong> — managing image promotion and VM deployment across dev/staging/prod with ArgoCD application sets</li>
+  <li><strong>Monitoring & alerting</strong> — tracking guest agent health, VM provisioning performance, and Crossplane reconciliation metrics</li>
+  <li><strong>Security & compliance</strong> — image scanning policies, RBAC for workload namespaces, network policies</li>
+</ul>
+
+</body>
+</html>

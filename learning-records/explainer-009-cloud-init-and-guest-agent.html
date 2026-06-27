@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cloud-init & Guest Agent for VM Workloads</title>
+<title>Cloud-init, Guest Agent &amp; K8s-Native VM Configuration</title>
 <style>
   :root {
     --bg: #0d1117;
@@ -94,6 +94,8 @@
   .callout.danger .callout-label { color: var(--accent-red); }
   .callout.success { border-left-color: var(--accent-green); }
   .callout.success .callout-label { color: var(--accent-green); }
+  .callout.k8s { border-left-color: var(--accent-cyan); }
+  .callout.k8s .callout-label { color: var(--accent-cyan); }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -140,30 +142,50 @@
     padding-left: 0;
   }
   .toc li { margin-bottom: 0.25rem; }
+  .toc ul ul { padding-left: 1.5rem; }
   .toc a { color: var(--accent); text-decoration: none; }
   .toc a:hover { text-decoration: underline; }
+  .pattern-badge {
+    display: inline-block;
+    padding: 0.15em 0.5em;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 600;
+    margin-right: 0.5rem;
+  }
+  .pattern-badge.cloud-init { background: #2d1b00; color: #d29922; }
+  .pattern-badge.k8s-native { background: #002d1b; color: #39d2c0; }
 </style>
 </head>
 <body>
 
 <!-- ═══════════════════════════════════════════ -->
-<h1>Cloud-init &amp; Guest Agent for VM Workloads</h1>
+<h1>Cloud-init, Guest Agent &amp; K8s-Native VM Configuration</h1>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>Two pieces make VMs actually useful: cloud-init (provisioning at first boot) and the guest agent (runtime visibility and management). In a Crossplane + KubeVirt stack, these need careful configuration — especially on OpenShift where the SDN, RBAC, and networking differ from public clouds.</p>
+<p>VMs need two things to be useful: <strong>configuration at boot</strong> (how they start) and <strong>runtime visibility</strong> (how you manage them). In a Crossplane + KubeVirt stack, you have a choice of patterns — traditional cloud-init for first-boot provisioning, and Kubernetes-native patterns (ConfigMaps, Secrets, init containers, readiness probes) that align with GitOps and your existing stack. This explainer covers both, showing when each pattern fits best.</p>
 
 <div class="toc">
   <h2>Contents</h2>
   <ul>
     <li><a href="#cloud-init-basics">1. Cloud-init: First-Boot Provisioning</a></li>
     <li><a href="#cloud-init-structure">2. Cloud-init Document Structure</a></li>
-    <li><a href="#cloud-init-openshift">3. Cloud-init on OpenShift</a></li>
-    <li><a href="#guest-agent">4. Guest Agent: Runtime Visibility</a></li>
-    <li><a href="#guest-agent-status">5. Guest Agent Status in Crossplane</a></li>
-    <li><a href="#cloud-init-composition">6. Injecting Cloud-init via Composition</a></li>
-    <li><a href="#windows">7. Windows Guest Support</a></li>
-    <li><a href="#troubleshooting">8. Troubleshooting</a></li>
-    <li><a href="#whats-next">9. What's Next</a></li>
+    <li><a href="#k8s-alternatives">3. Kubernetes-Native Alternatives</a>
+      <ul>
+        <li><a href="#k8s-configmaps">3a. ConfigMaps &amp; Secrets for Config</a></li>
+        <li><a href="#k8s-init-containers">3b. Init Containers for Boot Tasks</a></li>
+        <li><a href="#k8s-connection-secrets">3c. Crossplane Connection Secrets</a></li>
+        <li><a href="#k8s-readiness">3d. Readiness Probes for Health</a></li>
+        <li><a href="#k8s-composition-functions">3e. Composition Functions for Dynamic Config</a></li>
+      </ul>
+    </li>
+    <li><a href="#cloud-init-openshift">4. Cloud-init on OpenShift</a></li>
+    <li><a href="#guest-agent">5. Guest Agent: Runtime Visibility</a></li>
+    <li><a href="#guest-agent-status">6. Guest Agent Status in Crossplane</a></li>
+    <li><a href="#composition-injection">7. Injecting Config via Composition</a></li>
+    <li><a href="#windows">8. Windows Guest Support</a></li>
+    <li><a href="#troubleshooting">9. Troubleshooting</a></li>
+    <li><a href="#whats-next">10. What's Next</a></li>
   </ul>
 </div>
 
@@ -171,132 +193,470 @@
 <h2 id="cloud-init-basics">1. Cloud-init: First-Boot Provisioning</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>Cloud-init is the de facto standard for VM initialization. It runs once at first boot (or every boot with <code>runcmd</code> scripts) and configures:</p>
+<p>Cloud-init is the de-facto standard for first-boot VM provisioning. It runs once when a VM boots for the first time, executing commands, writing files, and configuring users. KubeVirt supports cloud-init via two mechanisms:</p>
 
-<ul>
-  <li><strong>Networking</strong> — static IPs, DNS, routes, bond interfaces</li>
-  <li><strong>Users &amp; auth</strong> — SSH keys, passwords, sudo access</li>
-  <li><strong>Packages</strong> — install software, apply patches</li>
-  <li><strong>Services</strong> — start/enable daemons</li>
-  <li><strong>Files</strong> — drop config files, certificates, scripts</li>
-  <li><strong>Hostname</strong> — set the system hostname</li>
-</ul>
+<table>
+  <tr>
+    <th>Method</th>
+    <th>How It Works</th>
+    <th>Best For</th>
+  </tr>
+  <tr>
+    <td><code>cloudInit.noCloud</code></td>
+    <td>Injects a cloud-config as a disk (CD-ROM) via a DataVolume or Secret</td>
+    <td>User-data scripts, SSH keys, hostname</td>
+  </tr>
+  <tr>
+    <td><code>cloudInit.configDrive</code></td>
+    <td>Injects a config-drive ISO (OpenStack-compatible metadata service)</td>
+    <td>Complex networking, metadata service simulation</td>
+  </tr>
+</table>
 
-<p>In KubeVirt, cloud-init data is injected via the <code>guestInfo</code> or <code>cloudInitNoCloud</code> properties on the VirtualMachine spec. Crossplane compositions generate these from XR spec fields.</p>
+<p>In KubeVirt, cloud-init is always <strong>first-boot only</strong> — it runs once and never re-executes on subsequent boots. For runtime configuration changes, you need a different pattern (see Section 3).</p>
 
 <!-- ═══════════════════════════════════════════ -->
 <h2 id="cloud-init-structure">2. Cloud-init Document Structure</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>Cloud-init supports YAML or MIME multi-part documents. YAML is simpler and more common for straightforward use cases:</p>
+<p>A cloud-init document is a YAML file with named stages. Each stage runs in a defined order:</p>
 
-<pre><code># Basic cloud-init document
-#cloud-config
+<div class="diagram">  cloud-config stages (ordered):
+  │
+  ├─ #cloud-config
+  │   users          → Create users, set SSH keys, add to groups
+  │   ssh_authorized → Inject public keys for passwordless SSH
+  │   packages       → Install packages (apt/dnf/yum)
+  │   write_files    → Write arbitrary files to the filesystem
+  │   runcmd         → Run shell commands (final stage)
+  │   final_message  → Log a message when cloud-init finishes
+  │
+  └─ network:        → Configure networking (⚠️ avoid on OpenShift)
+</div>
 
-hostname: web-server-01
-fqdn: web-server-01.example.org
+<p>Example — a minimal cloud-init that sets a hostname and injects an SSH key:</p>
 
+<pre><code>#cloud-config
+hostname: my-vm
 users:
   - name: cloud-user
-    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: wheel
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
     ssh-authorized-keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host
-
-ssh_pwauth: false
-
-packages:
-  - htop
-  - tmux
-  - jq
-
+      - ssh-ed25519 AAAA... user@host
 runcmd:
   - systemctl enable qemu-guest-agent
   - systemctl start qemu-guest-agent
-  - echo "VM provisioned at $(date)" > /etc/VM_PROVISIONED
-  - curl -s http://metadata.internal/ready > /dev/null
+final_message: "VM {{ .XR.metadata.name }} is ready."</code></pre>
 
-final_message: "Cloud-init finished. VM is ready."
+<div class="callout k8s">
+  <div class="callout-label">K8s-native contrast</div>
+  Cloud-init is imperative and runs once. In Kubernetes, the equivalent concern — "ensure this resource exists" — is solved declaratively by controllers that reconcile continuously. Cloud-init is a <strong>procedural bootstrap</strong>; Kubernetes-native patterns are <strong>declarative state</strong>. For VMs, cloud-init is often the right tool for the bootstrap step, but K8s-native patterns are better for ongoing configuration.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="k8s-alternatives">3. Kubernetes-Native Alternatives</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Cloud-init is a traditional VM tool. In a Kubernetes-native stack, you have patterns that solve the same problems — config injection, boot-time setup, credential management, health checks — using resources and mechanisms your cluster already understands. This section covers each alternative and when to use it.</p>
+
+<div class="callout">
+  <div class="callout-label">Decision guide</div>
+  <ul>
+    <li><strong>Use cloud-init</strong> for OS-level setup that must happen before the main workload starts: user creation, package installation, firewall rules, hostname, guest agent enablement.</li>
+    <li><strong>Use K8s-native patterns</strong> for configuration that should be Git-tracked, version-controlled, and updatable without reimaging: app config, feature flags, connection strings, service registration.</li>
+    <li><strong>Use both</strong> when you need OS bootstrap (cloud-init) plus runtime config (K8s-native). This is the most common pattern.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h3 id="k8s-configmaps">3a. ConfigMaps &amp; Secrets for Configuration Data</h3>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Instead of using cloud-init <code>write_files</code> to drop config files into the VM, use Kubernetes ConfigMaps and mount them as volumes. This makes config version-controlled in Git, visible to ArgoCD, and updatable at runtime.</p>
+
+<p><span class="pattern-badge cloud-init">cloud-init</span> Traditional approach — write_files in cloud-init:</p>
+
+<pre><code>#cloud-config
 write_files:
-  - path: /etc/network-config
+  - path: /etc/myapp/config.yaml
     content: |
-      network:
-        version: 2
-        ethernets:
-          eth0:
-            dhcp4: false
-            addresses:
-              - {{ .XR.spec.network.staticIP }}/24
-            gateway4: {{ .XR.spec.network.gateway }}
-            nameservers:
-              addresses:
-                - 10.0.0.10
-                - 10.0.0.11
+      database_url: postgres://db:5432/myapp
+      feature_flags:
+        enable_beta: true
+  - path: /etc/myapp/secrets.yaml
+    content: |
+      api_key: super-secret-key</code></pre>
 
-manage_etc_hosts: true</code></pre>
+<p><span class="pattern-badge k8s-native">K8s-native</span> ConfigMap + Secret approach:</p>
 
-<p>MIME multi-part documents let you mix cloud-init with custom scripts — useful when you need shell scripts that run before cloud-init:</p>
+<pre><code># configmaps/myapp-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myapp-config
+  namespace: workloads-dev
+data:
+  config.yaml: |
+    database_url: postgres://db:5432/myapp
+    feature_flags:
+      enable_beta: true
+---
+# secrets/myapp-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: myapp-secrets
+  namespace: workloads-dev
+type: Opaque
+stringData:
+  api_key: super-secret-key</code></pre>
 
-<pre><code>MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="==MYBOUNDARY=="
+<p>Mount these in the VirtualMachine spec via the KubeVirt <code>guestInfo</code> cloud-init source or a DataVolume:</p>
 
---==MYBOUNDARY==
-Content-Type: text/cloud-config; charset="us-ascii"
+<pre><code># composition: mount ConfigMap/Secret into VM
+- name: virtualmachine
+  patches:
+    - type: Inline
+      patches: |
+        spec:
+          template:
+            spec:
+              domain:
+                devices:
+                  disks:
+                    - name: rootdisk
+                      disk: { bus: virtio }
+                    - name: config-volume
+                      disk: { bus: virtio }
+                    - name: secrets-volume
+                      disk: { bus: virtio }
+              volumes:
+                - dataVolume:
+                    name: '{{ .XR.metadata.name }}-config-dv'
+                  name: config-volume
+                - secret:
+                    secretName: '{{ .XR.metadata.name }}-secrets'
+                  name: secrets-volume</code></pre>
 
-#cloud-config
-hostname: web-server-01
+<div class="callout k8s">
+  <div class="callout-label">Why this is better for GitOps</div>
+  ConfigMaps and Secrets are Kubernetes resources — they live in Git, are managed by ArgoCD, and can be updated without touching the VM's disk image. cloud-init <code>write_files</code> embeds config in the VM at first boot; changing it requires either a cloud-init re-run (not supported after first boot) or SSH into the VM and edit manually.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h3 id="k8s-init-containers">3b. Init Containers for Boot-Time Tasks</h3>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Cloud-init <code>runcmd</code> runs shell commands at first boot. The Kubernetes-native equivalent is <strong>init containers</strong> — they run before the main workload starts and can perform setup tasks like creating directories, downloading files, or running migrations.</p>
+
+<p><span class="pattern-badge cloud-init">cloud-init</span> runcmd in cloud-init:</p>
+
+<pre><code>#cloud-config
+runcmd:
+  - mkdir -p /etc/myapp/data
+  - curl -s https://config-server/config | jq '.production' > /etc/myapp/config.json
+  - chmod 600 /etc/myapp/config.json</code></pre>
+
+<p><span class="pattern-badge k8s-native">K8s-native</span> Init container approach:</p>
+
+<pre><code># compositions/vm-config-init.yaml
+- name: virtualmachine
+  patches:
+    - type: Inline
+      patches: |
+        spec:
+          template:
+            spec:
+              initContainers:
+                - name: setup-config
+                  image: curlimages/curl:latest
+                  command: ['sh', '-c']
+                  args:
+                    - |
+                      mkdir -p /etc/myapp/data
+                      curl -s https://config-server/config \
+                        --cacert /etc/tls/ca.crt \
+                        | jq '.production' > /etc/myapp/config.json
+                      chmod 600 /etc/myapp/config.json
+                  volumeMounts:
+                    - name: config-data
+                      mountPath: /etc/myapp
+                  envFrom:
+                    - secretRef:
+                        name: config-server-credentials
+              containers:
+                - name: workload
+                  image: my-registry/myapp:latest
+              volumes:
+                - name: config-data
+                  configMap:
+                    name: myapp-config
+                - name: tls-ca
+                  secret:
+                    secretName: config-server-ca</code></pre>
+
+<div class="callout">
+  <div class="callout-label">Important: KubeVirt init containers</div>
+  KubeVirt VMs run as pods, so init containers are supported. However, the init container shares the VM's filesystem with the main workload — changes persist across the VM lifecycle. For ephemeral setup (run once per boot), this works well. For persistent config, prefer ConfigMap volume mounts (Section 3a).
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h3 id="k8s-connection-secrets">3c. Crossplane Connection Secrets for Credentials</h3>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Instead of injecting SSH keys and passwords via cloud-init, use Crossplane's built-in <strong>connection secret</strong> mechanism. This is the most K8s-native way to handle credentials in a Crossplane stack.</p>
+
+<p><span class="pattern-badge cloud-init">cloud-init</span> SSH key via cloud-init:</p>
+
+<pre><code>#cloud-config
+ssh_authorized_keys:
+  - {{ .XR.spec.guest.sshKey }}
+write_files:
+  - path: /etc/myapp/credentials.env
+    content: |
+      DB_HOST={{ .XR.spec.database.host }}
+      DB_PASS={{ .XR.spec.database.password }}</code></pre>
+
+<p><span class="pattern-badge k8s-native">K8s-native</span> Crossplane connection secret:</p>
+
+<pre><code># composition: create connection secret from XR spec
+- name: connection-secret
+  base:
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: '{{ .XR.metadata.name }}-connection'
+      namespace: '{{ .XR.metadata.namespace }}'
+      annotations:
+        crossplane.io/composition-resource-name: connection-secret
+    type: Opaque
+  patches:
+    - from: XR
+      to: metadata
+      transforms:
+        - type: string
+          string:
+            fmt: '%s-connection'
+    - type: ConnectionSecretKeyRefs
+      fieldPath: spec.database
+    - type: ConnectionSecretValues
+      fieldPath: spec.credentials</code></pre>
+
+<p>The VirtualMachine composition then references this secret:</p>
+
+<pre><code># composition: inject connection secret into VM
+- name: virtualmachine
+  patches:
+    - type: FromCompositeFieldPath
+      from: connection-secret
+      toFieldPath: spec.template.spec.volumes[*].secret.secretName</code></pre>
+
+<div class="callout k8s">
+  <div class="callout-label">Why connection secrets are better</div>
+  <ul>
+    <li>Credentials are managed by Crossplane, not baked into cloud-init YAML</li>
+    <li>Secret rotation is a Crossplane concern — update the secret, and it propagates</li>
+    <li>ArgoCD can manage secret resources in Git without exposing plaintext (use SealedSecrets or SOPS)</li>
+    <li>No SSH into VM needed to rotate credentials</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h3 id="k8s-readiness">3d. Readiness Probes for Health Checks</h3>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Cloud-init has no concept of health checks. Kubernetes-native pods have <strong>readiness probes</strong> that determine whether a workload is ready to receive traffic. For VMs, you can achieve the same effect through the guest agent and Crossplane XR status conditions.</p>
+
+<p>The flow:</p>
+
+<div class="diagram">  VM guest agent
+    │
+    │  Reports: OS info, IPs, disk usage, processes
+    ▼
+  KubeVirt VMI status
+    │
+    │  .status.guestOSInfo, .status.interfaces, .status.conditions
+    ▼
+  Crossplane XR status
+    │
+    │  status.atProvider.ready, status.atProvider.guestInfo
+    ▼
+  ArgoCD health check
+    │
+    │  Ready if:
+    │    • VM Running
+    │    • Agent.Connected
+    │    • Guest has IPs
+    │    • Custom readiness marker file
+</div>
+
+<p>For a custom readiness marker (the closest equivalent to a readiness probe on a VM), use cloud-init or an init container to create a file that ArgoCD checks:</p>
+
+<pre><code># Init container: signal readiness after setup completes
+initContainers:
+  - name: readiness-signal
+    image: busybox:latest
+    command: ['sh', '-c']
+    args:
+      - |
+        # Wait for guest agent to be running
+        until systemctl is-active qemu-guest-agent; do
+          sleep 2
+        done
+        # Signal that setup is complete
+        echo "ready" > /etc/myapp/READY
+        echo "Setup complete at $(date)" >> /var/log/setup.log
+    volumeMounts:
+      - name: config-data
+        mountPath: /etc/myapp</code></pre>
+
+<p>ArgoCD can then check for this file using a custom health check script:</p>
+
+<pre><code># ArgoCD application health check
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: my-vm-workload
+spec:
+  destination:
+    namespace: workloads-dev
+  source:
+    path: apps/my-vm
+    repoURL: 'https://git.example.com/infra.git'
+  healthChecks:
+    - issuer: custom
+      version: v1
+      tool:
+        name: vm-health
+        version: v1
+        settings:
+          valueDirs:
+            - ready</code></pre>
+
+<div class="callout k8s">
+  <div class="callout-label">K8s-native vs cloud-init health</div>
+  Readiness probes are the standard K8s pattern for this concern. On VMs, you can't use TCP/HTTP probes directly, so you either use the guest agent (KubeVirt-native) or a readiness marker file (init container + ArgoCD custom check). Both are more GitOps-friendly than cloud-init's implicit "first boot completed" state.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h3 id="k8s-composition-functions">3e. Composition Functions for Dynamic Config</h3>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>Hardcoding cloud-init YAML in a Composition's <code>patches</code> section doesn't scale. Composition Functions (covered in explainer 002) let you generate config dynamically from XR spec inputs — the most K8s-native way to handle variable VM configuration.</p>
+
+<p><span class="pattern-badge cloud-init">cloud-init</span> Patch-and-Transform (limited):</p>
+
+<pre><code># composition: hardcoded cloud-init, string interpolation only
+- name: cloudinit-secret
+  base:
+    apiVersion: v1
+    kind: Secret
+    data:
+      user-data: |
+        #cloud-config
+        hostname: {{ .XR.metadata.name }}
+        runcmd:
+          - echo "env={{ .XR.spec.environment }}" > /etc/env.conf
+  patches:
+    - type: FromCompositeFieldPath
+      from: environment
+      toFieldPath: data.user-data</code></pre>
+
+<p><span class="pattern-badge k8s-native">K8s-native</span> Go-Templating Function (full logic):</p>
+
+<pre><code># composition: Go-Templating Function generates cloud-init dynamically
+- step: generate-config
+  functionRef:
+    name: crossplane-function-go-templating
+  inputs:
+    - apiVersion: apps.crossplane.io/v1alpha1
+      kind: FunctionRequest
+      spec:
+        functions:
+          - name: go-templating
+            configRef:
+              name: vm-config-template
+  outputs:
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: '{{ .XR.metadata.name }}-config'
+      data:
+        user-data: |
+          {{- template "vmUserdata" . }}
+          {{- define "vmUserdata" }}
+          #cloud-config
+          hostname: {{ .xr.metadata.name }}
+          users:
+            - name: {{ .xr.spec.guest.username | default "cloud-user" }}
+          {{- if .xr.spec.guest.sshKey }}
+          ssh_authorized_keys:
+            - {{ .xr.spec.guest.sshKey }}
+          {{- end }}
+          runcmd:
+            {{- range .xr.spec.guest.packages }}
+            - dnf install -y {{ . }}
+            {{- end }}
+            - systemctl enable qemu-guest-agent
+          write_files:
+            {{- range .xr.spec.configFiles }}
+            - path: {{ .path }}
+              content: |
+                {{ .content | indent 14 }}
+            {{- end }}
+          {{- end }}</code></pre>
+
+<div class="callout k8s">
+  <div class="callout-label">Why Composition Functions are better</div>
+  <ul>
+    <li>Full templating: conditionals, loops, defaults — no string interpolation hacks</li>
+    <li>XR spec drives config: change the XR, the config changes, no Composition edits needed</li>
+    <li>Version-controlled in Git: the template is a Composition Function Config, managed by ArgoCD</li>
+    <li>Reusable across XRDs: same template function can serve multiple resource types</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="cloud-init-openshift">4. Cloud-init on OpenShift</h2>
+<!-- ═══════════════════════════════════════════ -->
+
+<p>When you do use cloud-init on OpenShift, there are important differences from public cloud environments:</p>
+
+<ul>
+  <li><strong>No direct SSH to VM IP</strong> — the VM IP is a pod IP, accessible only within the cluster. Use <code>oc rsh</code> or SSH port-forwarding.</li>
+  <li><strong>No cloud-init network config</strong> — OpenShift's OVN-Kubernetes SDN handles primary networking. Setting <code>network.config</code> in cloud-init will break VM networking.</li>
+  <li><strong>Secondary networks via Multus</strong> — use NetworkAttachmentDefinition CRs for additional interfaces.</li>
+  <li><strong>Firewall is cluster-managed</strong> — don't try to configure firewalld via cloud-init on OpenShift.</li>
+</ul>
+
+<p>OpenShift-safe cloud-init (minimal, no network config):</p>
+
+<pre><code>#cloud-config
+# OpenShift: disable network config, let SDN handle it
+network:
+  version: 1
+  config: disabled
+
 users:
   - name: cloud-user
+    groups: wheel
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
     ssh-authorized-keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host
+      - {{ .XR.spec.guest.sshKey | default "" }}
 
---==MYBOUNDARY==
-Content-Type: text/x-shellscript; charset="us-ascii"
+runcmd:
+  # Enable guest agent
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
 
-#!/bin/bash
-# Pre-cloud-init setup
-echo "Configuring custom NTP..."
-timedatectl set-timezone America/Chicago
+  # Set hostname
+  - hostnamectl set-hostname {{ .XR.spec.guest.hostname }}
 
---==MYBOUNDARY==
-Content-Type: text/x-shellscript; charset="us-ascii"
+  # Create readiness marker for ArgoCD
+  - echo "ready" > /etc/VM_READY
 
-#!/bin/bash
-# Post-cloud-init
-echo "VM ready at $(date)"
-curl -s http://monitoring.internal/register -d '{"name":"{{ .XR.metadata.name }}","env":"{{ .XR.metadata.namespace }}"}'
-
---==MYBOUNDARY==--</code></pre>
-
-<!-- ═══════════════════════════════════════════ -->
-<h2 id="cloud-init-openshift">3. Cloud-init on OpenShift</h2>
-<!-- ═══════════════════════════════════════════ -->
-
-<p>OpenShift adds complexity to cloud-init. The OpenShift SDN (OVN-Kubernetes) handles networking differently than a flat network, and the default user is <code>cloud-user</code> (not <code>ec2-user</code> like AWS).</p>
-
-<h3>3.1 Networking on OpenShift</h3>
-
-<p>VMs on OpenShift typically use the <strong>multus CNI</strong> for secondary network interfaces. The primary interface connects to the OpenShift SDN; secondary interfaces connect to workload networks:</p>
-
-<div class="diagram">┌─────────────────────────────────────────────────┐
-│              VirtualMachine                     │
-│                                                 │
-│  ┌───────────────────────────────────────────┐  │
-│  │  Primary NIC (OVN-Kubernetes)             │  │
-│  │  - DHCP from OpenShift SDN                │  │
-│  │  - Pod network namespace                  │  │
-│  │  - IP from OpenShift IP pool              │  │
-│  └───────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────┐  │
-│  │  Secondary NIC (Multus)                   │  │
-│  │  - Connected to workload network          │  │
-│  │  - Static IP from cloud-init              │  │
-│  │  - Isolated from OpenShift SDN            │  │
-│  └───────────────────────────────────────────┘  │
-│                                                 │
-│  Multus NetworkAttachmentDefinition:            │
-│  - workload-net (L2 isolated)                   │
-│  - management-net (management VLAN)             │
-└─────────────────────────────────────────────────┘</div>
+final_message: "VM {{ .XR.metadata.name }} is ready."</code></pre>
 
 <p>Configure secondary networks via NetworkAttachmentDefinition CRs:</p>
 
@@ -335,91 +695,18 @@ spec:
       fromFieldPath: spec.network.interfaces
       toFieldPath: spec.template.spec.domain.devices.interfaces</code></pre>
 
-<h3>3.2 OpenShift-Specific cloud-init</h3>
-
-<p>On OpenShift, cloud-init needs to handle the fact that the VM is actually a pod. Key differences:</p>
-
-<ul>
-  <li><strong>No direct SSH to VM IP</strong> — the VM IP is a pod IP, accessible only within the cluster. Use <code>oc rsh</code> or set up SSH port-forwarding.</li>
-  <li><strong>Root access requires special handling</strong> — OpenShift runs containers as non-root by default. The guest agent runs as root inside the VM, but the pod's init container handles the setup.</li>
-  <li><strong>Firewall</strong> — OpenShift's firewalld is managed by the cluster. Don't try to configure it via cloud-init.</li>
-</ul>
-
-<pre><code>#cloud-config
-# OpenShift-specific cloud-init
-
-# OpenShift uses cloud-user by default
-users:
-  - name: cloud-user
-    groups: wheel
-    sudo: ['ALL=(ALL) NOPASSWD:ALL']
-    shell: /bin/bash
-    ssh-authorized-keys:
-      - {{ .XR.spec.guest.sshKey | default "" }}
-
-# Disable cloud-init's network configuration — OpenShift handles it
-network:
-  version: 1
-  config: disabled
-
-# Use runcmd for OpenShift-specific setup
-runcmd:
-  # Disable unnecessary services that conflict with OpenShift
-  - systemctl disable firewalld 2>/dev/null || true
-  - systemctl stop firewalld 2>/dev/null || true
-
-  # Enable guest agent
-  - systemctl enable qemu-guest-agent
-  - systemctl start qemu-guest-agent
-
-  # Set hostname (OpenShift respects this for VM identification)
-  - hostnamectl set-hostname {{ .XR.spec.guest.hostname }}
-
-  # Register with internal monitoring
-  - |
-    curl -s -X POST http://monitoring.internal/register \
-      -H "Content-Type: application/json" \
-      -d '{
-        "name": "{{ .XR.metadata.name }}",
-        "namespace": "{{ .XR.metadata.namespace }}",
-        "image": "{{ .XR.spec.imageTemplate }}",
-        "env": "{{ .XR.metadata.namespace }}"
-      }'
-
-  # Create a ready marker file for ArgoCD health checks
-  - echo "ready" > /etc/VM_READY
-
-write_files:
-  - path: /etc/ssh/sshd_config.d/openshift.conf
-    content: |
-      PermitRootLogin prohibit-password
-      PasswordAuthentication no
-      PubkeyAuthentication yes
-      AuthorizedKeysFile .ssh/authorized_keys
-
-  - path: /usr/local/bin/vm-status
-    content: |
-      #!/bin/bash
-      # Simple VM status reporter
-      echo "VM: {{ .XR.metadata.name }}"
-      echo "Env: {{ .XR.metadata.namespace }}"
-      echo "Image: {{ .XR.spec.imageTemplate }}"
-      echo "Started: $(uptime)"
-      echo "Guest agent: $(systemctl is-active qemu-guest-agent)"
-    permissions: '0755'</code></pre>
-
 <div class="callout warning">
   <div class="callout-label">Warning: cloud-init networking conflicts</div>
-  If you configure <code>network.config</code> in cloud-init on OpenShift, it can conflict with the OVN-Kubernetes SDN and break VM networking. Always set <code>network: { version: 1, config: disabled }</code> and let OpenShift handle primary networking. Use multus for secondary interfaces only.
+  If you configure <code>network.config</code> in cloud-init on OpenShift, it can conflict with the OVN-Kubernetes SDN and break VM networking. Always set <code>network: { version: 1, config: disabled }</code> and let OpenShift handle primary networking. Use Multus for secondary interfaces only.
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="guest-agent">4. Guest Agent: Runtime Visibility</h2>
+<h2 id="guest-agent">5. Guest Agent: Runtime Visibility</h2>
 <!-- ═══════════════════════════════════════════ -->
 
 <p>The QEMU guest agent runs inside the VM and provides the hypervisor with runtime information. Without it, KubeVirt sees VMs as black boxes — no filesystem access, no graceful shutdown, no metrics.</p>
 
-<h3>4.1 What the Guest Agent Provides</h3>
+<h3>5.1 What the Guest Agent Provides</h3>
 
 <table>
   <tr>
@@ -469,7 +756,7 @@ write_files:
   </tr>
 </table>
 
-<h3>4.2 Installing and Configuring the Guest Agent</h3>
+<h3>5.2 Installing and Configuring the Guest Agent</h3>
 
 <p>Include guest agent installation in your base image build (see explainer 008):</p>
 
@@ -496,7 +783,6 @@ sudo qemu-ga --version</code></pre>
                 devices:
                   autoattachPodDevice: true
                   autoattachSerialConsole: true
-                  # Enable guest agent
                   serials:
                     - name: guestagent
                       devicePath: /dev/virtio-ports/org.qemu.guest_agent.0
@@ -505,26 +791,22 @@ sudo qemu-ga --version</code></pre>
                       masquerade: {}
                   disks:
                     - name: rootdisk
-                      disk:
-                        bus: virtio
+                      disk: { bus: virtio }
                     - name: cloudinitdisk
-                      disk:
-                        bus: virtio
+                      disk: { bus: virtio }
               guest:
-                # Require guest agent for accurate status
                 agent: true
               networks:
                 - name: default
                   pod: {}</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="guest-agent-status">5. Guest Agent Status in Crossplane</h2>
+<h2 id="guest-agent-status">6. Guest Agent Status in Crossplane</h2>
 <!-- ═══════════════════════════════════════════ -->
 
 <p>The guest agent's status flows through KubeVirt → Crossplane → your application. Understanding this flow is critical for monitoring and health checks.</p>
 
-<div class="diagram">
-┌──────────┐     ┌──────────────────┐     ┌─────────────────────┐
+<div class="diagram">┌──────────┐     ┌──────────────────┐     ┌─────────────────────┐
 │  VM      │────>│  KubeVirt        │────>│  Crossplane         │
 │  Guest   │     │  VMI Status      │     │  XR Status          │
 │  Agent   │     │                  │     │                     │
@@ -591,10 +873,10 @@ oc virt-guest-agent-command &lt;vm-name&gt; -n workloads-dev \
               toFieldPath: metadata.namespace</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="cloud-init-composition">6. Injecting Cloud-init via Composition</h2>
+<h2 id="composition-injection">7. Injecting Config via Composition</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>The composition generates the cloud-init user-data and passes it to KubeVirt via the <code>cloudInitNoCloud</code> or <code>guestInfo</code> source. Here's the full composition pattern:</p>
+<p>The composition generates cloud-init user-data and passes it to KubeVirt via the <code>cloudInitNoCloud</code> or <code>guestInfo</code> source. Here's the full composition pattern, combining cloud-init with K8s-native config injection:</p>
 
 <pre><code># compositions/xvirtualmachine-pipeline.yaml
 - step: inject-cloudinit
@@ -630,81 +912,117 @@ oc virt-guest-agent-command &lt;vm-name&gt; -n workloads-dev \
             metadata:
               name: '{{ .XR.metadata.name }}-cloudinit-secret'
               namespace: '{{ .XR.metadata.namespace }}'
-            type: kubernetes.io/opaque
-            stringData:
-              user-data: |
-                #cloud-config
-                hostname: {{ .XR.spec.guest.hostname | default .XR.metadata.name }}
-                fqdn: {{ .XR.spec.guest.hostname | default .XR.metadata.name }}.{{ .XR.metadata.namespace }}.svc.cluster.local
+            type: Opaque
+          patches:
+            - type: Inline
+              patches: |
+                stringData:
+                  user-data: |
+                    #cloud-config
+                    hostname: {{ .XR.metadata.name }}
+                    users:
+                      - name: cloud-user
+                        groups: wheel
+                        sudo: ['ALL=(ALL) NOPASSWD:ALL']
+                    runcmd:
+                      - systemctl enable qemu-guest-agent
+                      - systemctl start qemu-guest-agent
+                      - echo "ready" > /etc/VM_READY
+                    final_message: "VM {{ .XR.metadata.name }} is ready."</code></pre>
 
-                users:
-                  - name: cloud-user
-                    groups: wheel
-                    sudo: ['ALL=(ALL) NOPASSWD:ALL']
-                    ssh-authorized-keys:
-                    {{- range .XR.spec.guest.linux.sshKeys }}
-                      - {{ . }}
-                    {{- end }}
+<p>For K8s-native config injection alongside cloud-init, add ConfigMap-based volumes:</p>
 
-                packages:
-                  - htop
-                  - tmux
-                  - jq
-                  - qemu-guest-agent
-
-                runcmd:
-                  - systemctl enable qemu-guest-agent
-                  - systemctl start qemu-guest-agent
-                  - echo "VM {{ .XR.metadata.name }} provisioned at $(date)" > /etc/VM_PROVISIONED
-                  - echo "ready" > /etc/VM_READY
-
-                write_files:
-                  - path: /etc/ssh/sshd_config.d/openshift.conf
-                    content: |
-                      PermitRootLogin prohibit-password
-                      PasswordAuthentication no
-                      PubkeyAuthentication yes
-
-                final_message: "Cloud-init finished. VM {{ .XR.metadata.name }} is ready."</code></pre>
-
-<p>The composition creates two resources: a DataVolume that references a Secret containing the cloud-init user-data, and the Secret itself. KubeVirt reads the cloud-init data from the Secret and injects it into the VM at boot via a cloud-init disk.</p>
+<pre><code># compositions/xvirtualmachine-k8s-config.yaml
+- step: inject-k8s-config
+  functionRef:
+    name: crossplane-function-patch-and-transform
+  inputs:
+    - apiVersion: pt.fn.crossplane.io/v1
+      kind: Resources
+      resources:
+        - name: config-dv
+          base:
+            apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataVolume
+            metadata:
+              name: '{{ .XR.metadata.name }}-config'
+              namespace: '{{ .XR.metadata.namespace }}'
+            spec:
+              pvc:
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 10Mi
+                storageClassName: 'local-storage'
+              source:
+                registry:
+                  url: 'docker://my-registry/config-init:latest'
+        - name: virtualmachine
+          base:
+            apiVersion: kubevirt.io/v1
+            kind: VirtualMachine
+          patches:
+            - type: Inline
+              patches: |
+                spec:
+                  template:
+                    spec:
+                      initContainers:
+                        - name: apply-config
+                          image: busybox:latest
+                          command: ['sh', '-c']
+                          args:
+                            - cp /config/* /data/ && echo "Config applied"
+                          volumeMounts:
+                            - name: config-volume
+                              mountPath: /config
+                            - name: data-volume
+                              mountPath: /data
+                      volumes:
+                        - dataVolume:
+                            name: '{{ .XR.metadata.name }}-config'
+                          name: config-volume
+                        - emptyDir: {}
+                          name: data-volume</code></pre>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="windows">7. Windows Guest Support</h2>
+<h2 id="windows">8. Windows Guest Support</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>Windows VMs use a different initialization mechanism: <strong>Guest Custom Data</strong> via the <code>guestInfo</code> cloud-init source, or <strong>unattend.xml</strong> for Windows-specific provisioning.</p>
+<p>Windows VMs need special handling for both cloud-init and the guest agent.</p>
 
-<h3>7.1 Windows Guest Custom Data (cloud-init for Windows)</h3>
+<h3>8.1 Windows Cloud-init (guest custom data)</h3>
 
-<p>KubeVirt supports cloud-init for Windows 2016+ via the <code>guestInfo</code> source. This uses a subset of cloud-init features:</p>
+<p>KubeVirt 1.1+ supports Windows guest custom data via <code>cloudInit.guestCustomData</code>. This is a base64-encoded blob that Windows processes via Guest Agent or a custom provisioner:</p>
 
-<pre><code># composition: Windows cloud-init
-- name: cloudinit-secret
-  base:
-    apiVersion: v1
-    kind: Secret
-    metadata:
-      name: '{{ .XR.metadata.name }}-cloudinit-secret'
-      namespace: '{{ .XR.metadata.namespace }}'
-    type: kubernetes.io/opaque
-    stringData:
-      user-data: |
-        #cloud-config
-        hostname: win-server-01
-        users:
-          - name: Administrator
-            ssh-authorized-keys: []
-        password: '{{ .XR.spec.guest.windows.adminPassword }}'
-        chpasswd:
-          expire: false
-        runcmd:
-          - powershell -Command "Set-NetAdapter -Name 'Ethernet' | Set-NetIPInterface -Dhcp Enabled"
-          - powershell -Command "Install-WindowsFeature -Name Web-Server"
-        packages: []
-        final_message: "Windows VM {{ .XR.metadata.name }} is ready."</code></pre>
+<pre><code># composition: Windows guest custom data
+- name: virtualmachine
+  patches:
+    - type: Inline
+      patches: |
+        spec:
+          template:
+            spec:
+              domain:
+                devices:
+                  autoattachPodDevice: true
+                  autoattachSerialConsole: false
+                  autoattachGraphicsDevice: false
+                  serials:
+                    - name: guestagent
+                      devicePath: 'COM1'
+              guest:
+                agent: true
+              cloudInit:
+                guestCustomData: |
+                  &lt;powershell&gt;
+                  New-Item -ItemType Directory -Path "C:\setup" -Force
+                  Set-Content -Path "C:\setup\config.json" -Value '{"env":"{{ .XR.spec.environment }}"}'
+                  Start-Service qemu-ga
+                  &lt;/powershell&gt;</code></pre>
 
-<h3>7.2 Windows Guest Agent</h3>
+<h3>8.2 Windows Guest Agent</h3>
 
 <p>Windows VMs need the <strong>QEMU Guest Agent for Windows</strong> installed. Include it in your Windows base image:</p>
 
@@ -712,7 +1030,7 @@ oc virt-guest-agent-command &lt;vm-name&gt; -n workloads-dev \
 provisioner "powershell" {
   inline = [
     # Download and install QEMU guest agent
-    'Invoke-WebRequest -Uri "https://download.qemu.org/qga/qemu-ga-win-*.msi" -OutFile "C:\qemu-ga.msi"',
+    'Invoke-WebRequest -Uri "https://download.qemu.org/qemu-ga-win-*.msi" -OutFile "C:\qemu-ga.msi"',
     'msiexec /i C:\qemu-ga.msi /quiet /norestart',
     # Enable and start the service
     'Start-Service qemu-ga',
@@ -748,10 +1066,10 @@ provisioner "powershell" {
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="troubleshooting">8. Troubleshooting</h2>
+<h2 id="troubleshooting">9. Troubleshooting</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<h3>8.1 Cloud-init not running</h3>
+<h3>9.1 Cloud-init not running</h3>
 
 <pre><code># Check cloud-init status inside the VM
 oc rsh &lt;vm-debug-pod&gt;
@@ -766,7 +1084,7 @@ cat /var/log/cloud-init-output.log
 # Check if cloud-init disk was attached
 oc get vmi &lt;vm-name&gt; -n workloads-dev -o yaml | grep -A5 cloudInit</code></pre>
 
-<h3>8.2 Guest agent not connecting</h3>
+<h3>9.2 Guest agent not connecting</h3>
 
 <pre><code># Check VMI status for agent connection
 oc get vmi &lt;vm-name&gt; -n workloads-dev -o jsonpath='{.status.conditions[?(@.type=="AgentConnected")].status}'
@@ -782,7 +1100,7 @@ ls -la /dev/virtio-ports/
 # 3. Check KubeVirt logs for agent errors
 oc logs -n kubevirt $(oc get pods -n kubevirt -l kubevirt.io=virt-handler -o name) | grep agent</code></pre>
 
-<h3>8.3 Network conflicts</h3>
+<h3>9.3 Network conflicts</h3>
 
 <pre><code># If VM lost networking after cloud-init:
 # 1. Check if cloud-init modified network config
@@ -799,7 +1117,7 @@ oc debug node/&lt;worker-node&gt;
 # chroot into the node and check CNI plugins
 ls /var/lib/cni/</code></pre>
 
-<h3>8.4 SSH not working</h3>
+<h3>9.4 SSH not working</h3>
 
 <pre><code># Common causes:
 # 1. SSH key not injected — check cloud-init secret
@@ -818,16 +1136,36 @@ firewall-cmd --list-ports  # Should be empty on OpenShift
 oc port-forward &lt;vm-name&gt; 2222:22 -n workloads-dev
 ssh -p 2222 cloud-user@localhost</code></pre>
 
+<h3>9.5 K8s-native config not applying</h3>
+
+<pre><code># If using init containers or ConfigMaps and config isn't appearing:
+# 1. Check init container logs
+oc logs &lt;vm-pod&gt; -n workloads-dev -c setup-config
+
+# 2. Check if ConfigMap was created
+oc get configmap myapp-config -n workloads-dev -o yaml
+
+# 3. Check if the volume was mounted
+oc rsh &lt;vm-pod&gt;
+ls -la /etc/myapp/
+
+# 4. Check ArgoCD sync status
+oc get applications -n openshift-gitops | grep my-vm
+
+# 5. Check XR status for composition errors
+oc get xr &lt;vm-name&gt; -n workloads-dev -o yaml | grep -A10 status</code></pre>
+
 <!-- ═══════════════════════════════════════════ -->
-<h2 id="whats-next">9. What's Next</h2>
+<h2 id="whats-next">10. What's Next</h2>
 <!-- ═══════════════════════════════════════════ -->
 
-<p>With cloud-init and guest agent configured, your VMs are provisioned at boot and visible at runtime. The remaining topics for your stack:</p>
+<p>With cloud-init for OS bootstrap and K8s-native patterns for runtime config, your VMs are provisioned at boot and manageable at runtime. The remaining topics for your stack:</p>
 
 <ul>
+  <li><strong>VM configuration data deep-dive</strong> — passing KV pairs to VMs via ConfigMaps, Secrets, and composition functions (explainer 010)</li>
   <li><strong>Multi-environment rollout</strong> — managing image promotion and VM deployment across dev/staging/prod with ArgoCD application sets</li>
-  <li><strong>Monitoring & alerting</strong> — tracking guest agent health, VM provisioning performance, and Crossplane reconciliation metrics</li>
-  <li><strong>Security & compliance</strong> — image scanning policies, RBAC for workload namespaces, network policies</li>
+  <li><strong>Monitoring &amp; alerting</strong> — tracking guest agent health, VM provisioning performance, and Crossplane reconciliation metrics</li>
+  <li><strong>Security &amp; compliance</strong> — image scanning policies, RBAC for workload namespaces, network policies</li>
 </ul>
 
 </body>

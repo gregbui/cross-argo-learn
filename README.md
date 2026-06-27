@@ -53,7 +53,7 @@ Build an on-prem infrastructure provisioning stack that delivers virtual machine
     ├── explainer-006-vm-workload-dev.html  # OS images, cloud-init, guest agents, Windows
     ├── explainer-007-xrd-composition-vm-deep-dive.html  # XRD & Composition deep dive for VM workloads
     ├── explainer-008-os-image-management.html    # OS image management: build, scan, push, update strategies
-    ├── explainer-009-cloud-init-and-guest-agent.html  # Cloud-init provisioning and guest agent integration
+    ├── explainer-009-cloud-init-and-guest-agent.html  # Cloud-init, guest agent, and K8s-native config patterns
     ├── explainer-010-vm-configuration-data.html  # Passing KV pairs to VMs via cloud-init
     │
     ├── explainer-011-multi-cluster-vm-placement.html  # Multi-cluster VM placement logic
@@ -196,20 +196,23 @@ Each explainer is an interactive HTML document with inline exercises and collaps
 
 ---
 
-### Explainer 9: [Cloud-init & Guest Agent](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-009-cloud-init-and-guest-agent.html)
+### Explainer 9: [Cloud-init, Guest Agent & K8s-Native Config](http://htmlpreview.github.io/?https://github.com/gregbui/cross-argo-learn/blob/main/learning-records/explainer-009-cloud-init-and-guest-agent.html)
 
 **What it covers:**
-- Cloud-init YAML and MIME multi-part document structures
+- Cloud-init YAML structure and first-boot provisioning
+- Kubernetes-native alternatives: ConfigMaps, Secrets, init containers, readiness probes
+- Crossplane connection secrets for credentials (replacing cloud-init SSH keys)
+- Composition Functions for dynamic config generation (Go-Templating)
 - OpenShift-specific networking: multus CNI, OVN-Kubernetes conflicts
 - Guest agent capabilities: OS info, IPs, filesystem access, graceful shutdown, live migration
 - Guest agent status flow: VM → KubeVirt VMI → Crossplane XR → ArgoCD
-- Composition pattern: cloud-init secret + DataVolume injection
+- Composition pattern: cloud-init secret + DataVolume + K8s-native config injection
 - Windows guest support: guest custom data and QEMU GA for Windows
-- Troubleshooting: cloud-init failures, agent connection, network conflicts, SSH
+- Troubleshooting: cloud-init failures, agent connection, network conflicts, SSH, K8s config issues
 
-**Key concepts:** cloud-init, write_files, multus, QEMU guest agent, VMI, guestInfo, virt-copy-in
+**Key concepts:** cloud-init, ConfigMaps, Secrets, init containers, connection secrets, readiness probes, Composition Functions, Go-Templating, multus, QEMU guest agent, VMI, guestInfo
 
-**Exercise:** Design cloud-init for a 3-tier app stack (web/app/db) with multus secondary networks
+**Exercise:** Design a 3-tier VM stack using cloud-init for OS bootstrap (users, packages) and K8s-native patterns (ConfigMaps, init containers) for app config, with multus secondary networks
 
 ---
 
